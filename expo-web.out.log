@@ -1,0 +1,8 @@
+
+> watercan-app@0.1.0 web
+> expo start --web --clear
+
+Starting project at C:\project\waterbottle\watercan-app
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Clearing Webpack development cache directory...

@@ -1,0 +1,253 @@
+Starting project at C:\project\waterbottle\watercan-app
+Starting Metro Bundler
+Starting Webpack on port 19006 in development mode.
+(node:16508) [DEP_WEBPACK_DEV_SERVER_CONSTRUCTOR] DeprecationWarning: Using 'compiler' as the first argument is deprecated. Please use 'options' as the first argument and 'compiler' as the second argument.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:16508) [DEP_WEBPACK_DEV_SERVER_LISTEN] DeprecationWarning: 'listen' is deprecated. Please use the async 'start' or 'startCallback' method.
+Some dependencies are incompatible with the installed expo version:
+  react-native@0.72.4 - expected version: 0.72.10
+  react-native-gesture-handler@2.10.2 - expected version: ~2.12.0
+  react-native-safe-area-context@4.5.0 - expected version: 4.6.3
+  @types/react@18.3.28 - expected version: ~18.2.14
+Your project may not work correctly until you install the correct versions of the packages.
+Fix with: npx expo install --fix
+Waiting on http://localhost:8083
+Logs for your project will appear below.
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/navigation/AppNavigator.tsx:16[39m[22m
+Module not found: Can't resolve '../screens/OwnerInventoryScreen'
+[0m [90m 14 | [39m[36mimport[39m [33mProfileScreen[39m [36mfrom[39m [32m'../screens/ProfileScreen'[39m[33m;[39m[0m
+[0m [90m 15 | [39m[36mimport[39m [33mOwnerApprovalsScreen[39m [36mfrom[39m [32m'../screens/OwnerApprovalsScreen'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 16 | [39m[36mimport[39m [33mOwnerInventoryScreen[39m [36mfrom[39m [32m'../screens/OwnerInventoryScreen'[39m[33m;[39m[0m
+[0m [90m 17 | [39m[36mimport[39m [33mOwnerCustomersScreen[39m [36mfrom[39m [32m'../screens/OwnerCustomersScreen'[39m[33m;[39m[0m
+[0m [90m 18 | [39m[0m
+[0m [90m 19 | [39m[36mexport[39m type [33mRootStackParamList[39m [33m=[39m {[0m
+
+[1m[31mERROR[39m[22m in [1m./src/navigation/AppNavigator.tsx:17[39m[22m
+Module not found: Can't resolve '../screens/OwnerCustomersScreen'
+[0m [90m 15 | [39m[36mimport[39m [33mOwnerApprovalsScreen[39m [36mfrom[39m [32m'../screens/OwnerApprovalsScreen'[39m[33m;[39m[0m
+[0m [90m 16 | [39m[36mimport[39m [33mOwnerInventoryScreen[39m [36mfrom[39m [32m'../screens/OwnerInventoryScreen'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 17 | [39m[36mimport[39m [33mOwnerCustomersScreen[39m [36mfrom[39m [32m'../screens/OwnerCustomersScreen'[39m[33m;[39m[0m
+[0m [90m 18 | [39m[0m
+[0m [90m 19 | [39m[36mexport[39m type [33mRootStackParamList[39m [33m=[39m {[0m
+[0m [90m 20 | [39m  [33mLogin[39m[33m:[39m undefined[33m;[39m[0m
+
+[1mweb[39m[22m compiled with [1m[31m2 errors[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/navigation/AppNavigator.tsx:17[39m[22m
+Module not found: Can't resolve '../screens/OwnerCustomersScreen'
+[0m [90m 15 | [39m[36mimport[39m [33mOwnerApprovalsScreen[39m [36mfrom[39m [32m'../screens/OwnerApprovalsScreen'[39m[33m;[39m[0m
+[0m [90m 16 | [39m[36mimport[39m [33mOwnerInventoryScreen[39m [36mfrom[39m [32m'../screens/OwnerInventoryScreen'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 17 | [39m[36mimport[39m [33mOwnerCustomersScreen[39m [36mfrom[39m [32m'../screens/OwnerCustomersScreen'[39m[33m;[39m[0m
+[0m [90m 18 | [39m[0m
+[0m [90m 19 | [39m[36mexport[39m type [33mRootStackParamList[39m [33m=[39m {[0m
+[0m [90m 20 | [39m  [33mLogin[39m[33m:[39m undefined[33m;[39m[0m
+
+[1mweb[39m[22m compiled with [1m[31m1 error[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/screens/OwnerInventoryScreen.tsx:134:6[39m[22m
+Syntax error: Expected corresponding JSX closing tag for <SafeAreaView>.
+
+[0m [90m 132 |[39m         [33m<[39m[33m/[39m[33mView[39m[33m>[39m
+ [90m 133 |[39m       [33m<[39m[33m/[39m[33mView[39m[33m>[39m
+[31m[1m>[22m[39m[90m 134 |[39m       [33m<[39m[33m/[39m[33mView[39m[33m>[39m
+ [90m     |[39m       [31m[1m^[22m[39m
+ [90m 135 |[39m       [33m<[39m[33mOwnerBottomNav[39m active[33m=[39m[32m"OwnerInventory"[39m [33m/[39m[33m>[39m
+ [90m 136 |[39m     [33m<[39m[33m/[39m[33mSafeAreaView[39m[33m>[39m
+ [90m 137 |[39m   )[33m;[39m[0m
+
+[1mweb[39m[22m compiled with [1m[31m1 error[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/navigation/AppNavigator.tsx:16[39m[22m
+Module not found: Can't resolve '../screens/OwnerInventoryScreen'
+[0m [90m 14 | [39m[36mimport[39m [33mProfileScreen[39m [36mfrom[39m [32m'../screens/ProfileScreen'[39m[33m;[39m[0m
+[0m [90m 15 | [39m[36mimport[39m [33mOwnerApprovalsScreen[39m [36mfrom[39m [32m'../screens/OwnerApprovalsScreen'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 16 | [39m[36mimport[39m [33mOwnerInventoryScreen[39m [36mfrom[39m [32m'../screens/OwnerInventoryScreen'[39m[33m;[39m[0m
+[0m [90m 17 | [39m[36mimport[39m [33mOwnerCustomersScreen[39m [36mfrom[39m [32m'../screens/OwnerCustomersScreen'[39m[33m;[39m[0m
+[0m [90m 18 | [39m[0m
+[0m [90m 19 | [39m[36mexport[39m type [33mRootStackParamList[39m [33m=[39m {[0m
+
+[1mweb[39m[22m compiled with [1m[31m1 error[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/screens/CustomerHomeScreen.tsx:3[39m[22m
+Module not found: Can't resolve 'expo-linear-gradient'
+[0m [90m 1 | [39m[36mimport[39m [33mReact[39m[33m,[39m { useContext[33m,[39m useCallback[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m[0m
+[0m [90m 2 | [39m[36mimport[39m { [33mImage[39m[33m,[39m [33mPressable[39m[33m,[39m [33mSafeAreaView[39m[33m,[39m [33mScrollView[39m[33m,[39m [33mStyleSheet[39m[33m,[39m [33mText[39m[33m,[39m [33mView[39m } [36mfrom[39m [32m'react-native'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 3 | [39m[36mimport[39m { [33mLinearGradient[39m } [36mfrom[39m [32m'expo-linear-gradient'[39m[33m;[39m[0m
+[0m [90m 4 | [39m[36mimport[39m { [33mAuthContext[39m } [36mfrom[39m [32m'../../App'[39m[33m;[39m[0m
+[0m [90m 5 | [39m[36mimport[39m { useNavigation[33m,[39m useFocusEffect } [36mfrom[39m [32m'@react-navigation/native'[39m[33m;[39m[0m
+[0m [90m 6 | [39m[36mimport[39m { [33mNativeStackNavigationProp[39m } [36mfrom[39m [32m'@react-navigation/native-stack'[39m[33m;[39m[0m
+
+[1mweb[39m[22m compiled with [1m[31m1 error[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/navigation/AppNavigator.tsx:9[39m[22m
+Module not found: Can't resolve '../screens/CustomerSubscriptionScreen'
+[0m [90m  7 | [39m[36mimport[39m [33mCustomerHomeScreen[39m [36mfrom[39m [32m'../screens/CustomerHomeScreen'[39m[33m;[39m[0m
+[0m [90m  8 | [39m[36mimport[39m [33mCustomerOrdersScreen[39m [36mfrom[39m [32m'../screens/CustomerOrdersScreen'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m  9 | [39m[36mimport[39m [33mCustomerSubscriptionScreen[39m [36mfrom[39m [32m'../screens/CustomerSubscriptionScreen'[39m[33m;[39m[0m
+[0m [90m 10 | [39m[36mimport[39m [33mCustomerWalletScreen[39m [36mfrom[39m [32m'../screens/CustomerWalletScreen'[39m[33m;[39m[0m
+[0m [90m 11 | [39m[36mimport[39m [33mOwnerHomeScreen[39m [36mfrom[39m [32m'../screens/OwnerHomeScreen'[39m[33m;[39m[0m
+[0m [90m 12 | [39m[36mimport[39m [33mNewOrderScreen[39m [36mfrom[39m [32m'../screens/NewOrderScreen'[39m[33m;[39m[0m
+
+[1mweb[39m[22m compiled with [1m[31m1 error[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/screens/CustomerSubscriptionScreen.tsx:3[39m[22m
+Module not found: Can't resolve '@react-native-async-storage/async-storage'
+[0m [90m 1 | [39m[36mimport[39m [33mReact[39m[33m,[39m { useEffect[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m[0m
+[0m [90m 2 | [39m[36mimport[39m { [33mPressable[39m[33m,[39m [33mSafeAreaView[39m[33m,[39m [33mStyleSheet[39m[33m,[39m [33mText[39m[33m,[39m [33mView[39m } [36mfrom[39m [32m'react-native'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 3 | [39m[36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m'@react-native-async-storage/async-storage'[39m[33m;[39m[0m
+[0m [90m 4 | [39m[36mimport[39m [33mCustomerBottomNav[39m [36mfrom[39m [32m'../components/CustomerBottomNav'[39m[33m;[39m[0m
+[0m [90m 5 | [39m[0m
+[0m [90m 6 | [39m[36mconst[39m [33mCustomerSubscriptionScreen[39m [33m=[39m () [33m=>[39m {[0m
+
+[1mweb[39m[22m compiled with [1m[31m1 error[39m[22m
+[1mweb[39m[22m compiled [1m[32msuccessfully[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/screens/CustomerSubscriptionScreen.tsx:3[39m[22m
+Module not found: Can't resolve '@react-native-async-storage/async-storage'
+[0m [90m 1 | [39m[36mimport[39m [33mReact[39m[33m,[39m { useCallback[33m,[39m useEffect[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m[0m
+[0m [90m 2 | [39m[36mimport[39m { [33mPressable[39m[33m,[39m [33mSafeAreaView[39m[33m,[39m [33mStyleSheet[39m[33m,[39m [33mText[39m[33m,[39m [33mView[39m } [36mfrom[39m [32m'react-native'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 3 | [39m[36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m'@react-native-async-storage/async-storage'[39m[33m;[39m[0m
+[0m [90m 4 | [39m[36mimport[39m [33mCustomerBottomNav[39m [36mfrom[39m [32m'../components/CustomerBottomNav'[39m[33m;[39m[0m
+[0m [90m 5 | [39m[0m
+[0m [90m 6 | [39m[36mconst[39m [33mCustomerSubscriptionScreen[39m [33m=[39m () [33m=>[39m {[0m
+
+[1mweb[39m[22m compiled with [1m[31m1 error[39m[22m
+[1m[31mERROR[39m[22m in [1m./src/screens/CustomerSubscriptionScreen.tsx:3[39m[22m
+Module not found: Can't resolve '@react-native-async-storage/async-storage'
+[0m [90m 1 | [39m[36mimport[39m [33mReact[39m[33m,[39m { useCallback[33m,[39m useEffect[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m[0m
+[0m [90m 2 | [39m[36mimport[39m { [33mPressable[39m[33m,[39m [33mSafeAreaView[39m[33m,[39m [33mStyleSheet[39m[33m,[39m [33mText[39m[33m,[39m [33mView[39m } [36mfrom[39m [32m'react-native'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 3 | [39m[36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m'@react-native-async-storage/async-storage'[39m[33m;[39m[0m
+[0m [90m 4 | [39m[36mimport[39m [33mCustomerBottomNav[39m [36mfrom[39m [32m'../components/CustomerBottomNav'[39m[33m;[39m[0m
+[0m [90m 5 | [39m[36mimport[39m { useFocusEffect } [36mfrom[39m [32m'@react-navigation/native'[39m[33m;[39m[0m
+[0m [90m 6 | [39m[0m
+
+[1mweb[39m[22m compiled with [1m[31m1 error[39m[22m

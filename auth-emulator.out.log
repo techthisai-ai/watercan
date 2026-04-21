@@ -1,0 +1,24 @@
+i  emulators: Starting emulators: auth {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: auth"}}
+i  emulators: Detected demo project ID "demo-watercan", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail. {"metadata":{"emulator":{"name":"hub"},"message":"Detected demo project ID \"demo-watercan\", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail."}}
+[2026-04-14T04:20:31.997Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[2026-04-14T04:20:31.998Z] [auth] Authentication Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[2026-04-14T04:20:32.000Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"auth":[{"address":"127.0.0.1","family":"IPv4","port":9099}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[2026-04-14T04:20:32.007Z] Emulator locator file path: C:\Users\ThisAI\AppData\Local\Temp\hub-demo-watercan.json
+[2026-04-14T04:20:32.008Z] [hub] writing locator at C:\Users\ThisAI\AppData\Local\Temp\hub-demo-watercan.json
+[2026-04-14T04:20:53.667Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌────────────────┬────────────────┬────────────────────────────┐
+│ Emulator       │ Host:Port      │ View in Emulator UI        │
+├────────────────┼────────────────┼────────────────────────────┤
+│ Authentication │ 127.0.0.1:9099 │ http://127.0.0.1:4000/auth │
+└────────────────┴────────────────┴────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
