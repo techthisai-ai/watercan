@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
@@ -28,7 +28,8 @@ import {
   createOrder,
   DeliverySlot,
   fetchCustomerOrders,
-  fetchInventorySummary,
+  fetchCustomerAvailableStock,
+  getFriendlyOrderMessage,
   getOrderById,
   PaymentStatus,
   updateOrder
@@ -38,8 +39,17 @@ import waterCanImage from '../assets/20-l-water-can.png';
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'NewOrder'>;
 
 const subscriptionStorageKey = 'customerSubscription';
-const walletBalance = 80;
-const checkoutSteps = ['Address', 'Schedule', 'Payment'];
+const defaultUpiId = 'thannican@upi';
+
+const normalizePaymentMethod = (method?: string): (typeof PAYMENT_OPTIONS)[number]['id'] => {
+  if (method === 'Google Pay') {
+    return 'Google Pay';
+  }
+  if (method === 'UPI ID' || method === 'UPI / GPay / PhonePe' || method === 'Wallet balance') {
+    return 'UPI ID';
+  }
+  return 'Cash on Delivery';
+};
 
 const slotWindows: Record<DeliverySlot, string> = {
   Morning: '7:00 AM - 10:00 AM',
@@ -49,7 +59,7 @@ const slotWindows: Record<DeliverySlot, string> = {
 };
 
 const NewOrderScreen = () => {
-  const { profile } = useContext(AuthContext);
+  const { profile, refreshProfile } = useContext(AuthContext);
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute();
   const params = (route.params ?? {}) as RootStackParamList['NewOrder'];
@@ -60,19 +70,47 @@ const NewOrderScreen = () => {
   const [deliverySlot, setDeliverySlot] = useState<DeliverySlot>('Morning');
   const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_OPTIONS)[number]['id']>('Cash on Delivery');
   const [showSummary, setShowSummary] = useState(false);
-  const [showPayment, setShowPayment] = useState(false);
+  const [showOrderAgain, setShowOrderAgain] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [orderPlaced, setOrderPlaced] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  const [upiId, setUpiId] = useState('thannican@upi');
+  const [upiId, setUpiId] = useState(defaultUpiId);
   const [availableStock, setAvailableStock] = useState(WATER_PRODUCT.availableStock);
+  const [selectedPack, setSelectedPack] = useState<{ label: string; qty: number } | null>(null);
+
+  const BULK_PACKS = [
+    { label: '10 Cans Pack', qty: 10 },
+    { label: '15 Cans Pack', qty: 15 },
+  ];
+
+  const handlePackSelect = (pack: { label: string; qty: number }) => {
+    setSelectedPack(pack);
+    setQuantity(pack.qty);
+  };
+
+  const loadInventory = useCallback(async () => {
+    try {
+      const stock = await fetchCustomerAvailableStock(editingOrderId);
+      setAvailableStock((current) => (current === stock ? current : stock));
+      return stock;
+    } catch {
+      return WATER_PRODUCT.availableStock;
+    }
+  }, [editingOrderId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshProfile().catch(() => {});
+      loadInventory();
+    }, [loadInventory, refreshProfile])
+  );
 
   useEffect(() => {
-    fetchInventorySummary().then((inv) => {
-      const stock = Math.max(0, (inv.openingStock ?? 0) + (inv.restockedCans ?? 0) - (inv.soldCans ?? 0));
-      setAvailableStock(stock);
-    }).catch(() => {});
-  }, []);
+    if (!editingOrderId) {
+      setIsEditing(false);
+    }
+  }, [editingOrderId]);
 
   useEffect(() => {
     let active = true;
@@ -86,13 +124,7 @@ const NewOrderScreen = () => {
             setQuantity(lastOrder.quantity);
             setNote(lastOrder.note ?? '');
             setDeliverySlot(lastOrder.deliverySlot);
-            setPaymentMethod(
-              lastOrder.paymentMethod === 'Wallet balance'
-                ? 'Wallet balance'
-                : lastOrder.paymentMethod === 'UPI / GPay / PhonePe'
-                  ? 'UPI / GPay / PhonePe'
-                  : 'Cash on Delivery'
-            );
+            setPaymentMethod(normalizePaymentMethod(lastOrder.paymentMethod));
           }
         }
         return;
@@ -107,13 +139,7 @@ const NewOrderScreen = () => {
       setQuantity(order.quantity);
       setNote(order.note ?? '');
       setDeliverySlot(order.deliverySlot);
-      setPaymentMethod(
-        order.paymentMethod === 'Wallet balance'
-          ? 'Wallet balance'
-          : order.paymentMethod === 'UPI / GPay / PhonePe'
-            ? 'UPI / GPay / PhonePe'
-            : 'Cash on Delivery'
-      );
+      setPaymentMethod(normalizePaymentMethod(order.paymentMethod));
     };
 
     loadPrefill();
@@ -127,14 +153,9 @@ const NewOrderScreen = () => {
   const addressReady = Boolean(profile?.address?.trim());
   const etaLabel = slotWindows[deliverySlot];
   const selectedPayment = PAYMENT_OPTIONS.find((option) => option.id === paymentMethod);
-  const paymentStatus: PaymentStatus =
-    paymentMethod === 'Cash on Delivery'
-      ? 'unpaid'
-      : paymentMethod === 'Wallet balance'
-        ? walletBalance >= totalAmount
-          ? 'paid'
-          : 'pending'
-        : 'paid';
+  const getPaymentStatus = (method: (typeof PAYMENT_OPTIONS)[number]['id']): PaymentStatus =>
+    method === 'Cash on Delivery' ? 'unpaid' : 'paid';
+  const paymentStatus = getPaymentStatus(paymentMethod);
 
   const summaryRows = useMemo(
     () => [
@@ -155,17 +176,20 @@ const NewOrderScreen = () => {
     if (!profile) {
       return 'Please sign in again.';
     }
+    if (profile.role !== 'customer') {
+      return 'Only customer accounts can place new orders.';
+    }
     if (!profile.address?.trim()) {
       return 'Please add your delivery address in Profile first.';
     }
     if (quantity <= 0) {
       return 'Please select at least 1 can.';
     }
-    if (paymentMethod === 'Wallet balance' && walletBalance < totalAmount) {
-      return 'Wallet balance is low. Choose Cash on Delivery or UPI.';
+    if (paymentMethod === 'UPI ID' && !upiId.trim()) {
+      return 'Please enter a valid UPI ID.';
     }
     return '';
-  }, [paymentMethod, profile, quantity, totalAmount]);
+  }, [paymentMethod, profile, quantity, upiId]);
 
   const openSummary = () => {
     const error = validateOrder();
@@ -186,16 +210,16 @@ const NewOrderScreen = () => {
     await AsyncStorage.setItem(
       subscriptionStorageKey,
       JSON.stringify({
-        qty: quantity,
+        qty: 50,
         frequency: 'Weekly',
-        time: deliverySlot,
+        time: deliverySlot === 'Express delivery' ? 'Morning' : deliverySlot,
         note
       })
     );
     Alert.alert('Weekly Water Plan added', 'Your subscription preference has been saved.');
   };
 
-  const handlePlaceOrUpdateOrder = async () => {
+  const handlePlaceOrUpdateOrder = async (selectedMethod: (typeof PAYMENT_OPTIONS)[number]['id'] = paymentMethod) => {
     const error = validateOrder();
     setErrorMessage(error);
     if (error || !profile) {
@@ -204,21 +228,24 @@ const NewOrderScreen = () => {
 
     setLoading(true);
     try {
+      const latestStock = await loadInventory();
       const payload = {
         customerId: profile.uid,
         customerName: profile.name,
         phone: profile.phone,
         address: profile.address?.trim(),
         productName: WATER_PRODUCT.name,
+        orderType: selectedPack ? 'bulk' as const : 'single' as const,
+        packName: selectedPack ? selectedPack.label : '',
         quantity,
         pricePerCan: WATER_PRODUCT.pricePerCan,
         deliveryCharge,
         totalAmount,
-        availableStock: availableStock,
+        availableStock: latestStock,
         note,
-        paymentMethod,
-        paymentStatus,
-        paidAmount: paymentStatus === 'paid' ? totalAmount : 0,
+        paymentMethod: selectedMethod === 'UPI ID' ? `UPI ID (${upiId.trim()})` : selectedMethod,
+        paymentStatus: getPaymentStatus(selectedMethod),
+        paidAmount: getPaymentStatus(selectedMethod) === 'paid' ? totalAmount : 0,
         deliverySlot,
         expectedDeliveryTime: etaLabel,
         subscription: false
@@ -226,7 +253,7 @@ const NewOrderScreen = () => {
 
       if (editingOrderId) {
         await updateOrder(editingOrderId, payload);
-        setShowPayment(false);
+        setShowOrderAgain(false);
         setShowSummary(false);
         Alert.alert('Order updated', 'Your order quantity and delivery slot were updated.');
         navigation.navigate('CustomerOrders');
@@ -234,60 +261,32 @@ const NewOrderScreen = () => {
       }
 
       const result = await createOrder(payload);
-      setShowPayment(false);
+      setShowOrderAgain(false);
       setShowSummary(false);
-      navigation.replace('OrderConfirmed', { orderId: result.id! });
+      setOrderPlaced(true);
+      setTimeout(() => {
+        setOrderPlaced(false);
+        navigation.replace('OrderConfirmed', { orderId: result.id! });
+      }, 1500);
     } catch (error: any) {
-      setErrorMessage(error.message || 'Unable to complete the order right now.');
+      setErrorMessage(getFriendlyOrderMessage(error));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSummaryPrimaryAction = () => {
+    setShowSummary(false);
+    if (params?.reorder && !isEditing) {
+      setShowOrderAgain(true);
+      return;
+    }
+    handlePlaceOrUpdateOrder(paymentMethod);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          {navigation.canGoBack() ? (
-            <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
-              <Text style={styles.backButtonText}>{'< Back'}</Text>
-            </Pressable>
-          ) : null}
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>Quick water delivery</Text>
-          </View>
-          <Text style={styles.title}>{isEditing ? 'Modify your order' : 'Book water cans in one minute'}</Text>
-          <Text style={styles.subtitle}>
-            Simple ordering for home delivery. Large buttons, clear prices, and easy delivery tracking.
-          </Text>
-
-          <View style={styles.heroStatsRow}>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{formatCurrency(WATER_PRODUCT.pricePerCan)}</Text>
-              <Text style={styles.heroStatLabel}>Per can</Text>
-            </View>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{quantity} cans</Text>
-              <Text style={styles.heroStatLabel}>In this order</Text>
-            </View>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{etaLabel}</Text>
-              <Text style={styles.heroStatLabel}>Delivery window</Text>
-            </View>
-          </View>
-
-          <View style={styles.stepRow}>
-            {checkoutSteps.map((step, index) => (
-              <View key={step} style={styles.stepItem}>
-                <View style={styles.stepIndex}>
-                  <Text style={styles.stepIndexText}>{index + 1}</Text>
-                </View>
-                <Text style={styles.stepText}>{step}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
         <View style={styles.addressCard}>
           <View style={styles.addressHeader}>
             <View style={styles.addressCopy}>
@@ -317,6 +316,45 @@ const NewOrderScreen = () => {
           lowStock={availableStock <= WATER_PRODUCT.lowStockThreshold}
         />
 
+        {/* Bulk Pack Selection */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Bulk Packet Order</Text>
+          <Text style={styles.sectionHint}>Select a pack to order in bulk</Text>
+          <View style={styles.packRow}>
+            {BULK_PACKS.map((pack) => {
+              const selected = selectedPack?.qty === pack.qty;
+              const outOfStock = pack.qty > availableStock;
+              return (
+                <Pressable
+                  key={pack.label}
+                  style={[
+                    styles.packChip,
+                    selected && styles.packChipSelected,
+                    outOfStock && styles.packChipOutOfStock
+                  ]}
+                  onPress={() => handlePackSelect(pack)}
+                >
+                  <Text style={[styles.packChipLabel, selected && styles.packChipLabelSelected]}>
+                    {pack.label}
+                  </Text>
+                  <Text style={[styles.packChipQty, selected && styles.packChipQtySelected]}>
+                    {pack.qty} cans · {formatCurrency(pack.qty * WATER_PRODUCT.pricePerCan)}
+                  </Text>
+                  {outOfStock ? <Text style={styles.packOutOfStockText}>Low stock</Text> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+          {selectedPack ? (
+            <Pressable
+              style={styles.clearPackBtn}
+              onPress={() => { setSelectedPack(null); setQuantity(2); }}
+            >
+              <Text style={styles.clearPackBtnText}>✕ Clear pack selection</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
         <View style={styles.spacer} />
 
         <QuantitySelector
@@ -326,7 +364,7 @@ const NewOrderScreen = () => {
           totalAmount={totalAmount}
           pricePerCan={WATER_PRODUCT.pricePerCan}
           disabledDecrease={quantity <= 1}
-          disabledIncrease={quantity >= availableStock}
+          disabledIncrease={false}
         />
 
         <View style={styles.card}>
@@ -374,7 +412,7 @@ const NewOrderScreen = () => {
               />
             ))}
           </View>
-          {paymentMethod === 'UPI / GPay / PhonePe' ? (
+          {paymentMethod === 'UPI ID' ? (
             <View style={styles.upiCard}>
               <Text style={styles.upiTitle}>UPI payment</Text>
               <Text style={styles.upiText}>Pay to UPI ID: {upiId}</Text>
@@ -387,15 +425,10 @@ const NewOrderScreen = () => {
               />
             </View>
           ) : null}
-          {paymentMethod === 'Wallet balance' ? (
+          {paymentMethod === 'Google Pay' ? (
             <View style={styles.walletCard}>
-              <Text style={styles.walletTitle}>Wallet balance</Text>
-              <Text style={styles.walletText}>
-                Available balance: {formatCurrency(walletBalance)}.{' '}
-                {walletBalance >= totalAmount
-                  ? 'Enough balance for this order.'
-                  : 'Please add money or choose another payment method.'}
-              </Text>
+              <Text style={styles.walletTitle}>Google Pay</Text>
+              <Text style={styles.walletText}>Use Google Pay to send {formatCurrency(totalAmount)} to {defaultUpiId}.</Text>
             </View>
           ) : null}
         </View>
@@ -447,7 +480,13 @@ const NewOrderScreen = () => {
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-        <Pressable style={styles.primaryButton} onPress={openSummary} disabled={loading}>
+        {orderPlaced ? (
+          <View style={styles.successBanner}>
+            <Text style={styles.successBannerText}>✓ Order placed successfully!</Text>
+          </View>
+        ) : null}
+
+        <Pressable style={styles.primaryButton} onPress={openSummary} disabled={loading || orderPlaced}>
           <Text style={styles.primaryButtonText}>{isEditing ? 'Review Changes' : 'Order Now'}</Text>
         </Pressable>
         <Pressable style={styles.secondaryButton} onPress={handleSaveSubscription}>
@@ -475,12 +514,9 @@ const NewOrderScreen = () => {
             ) : null}
             <Pressable
               style={styles.primaryButton}
-              onPress={() => {
-                setShowSummary(false);
-                setShowPayment(true);
-              }}
+              onPress={handleSummaryPrimaryAction}
             >
-              <Text style={styles.primaryButtonText}>Confirm Order</Text>
+              <Text style={styles.primaryButtonText}>{isEditing ? 'Save Order Changes' : 'Place Order'}</Text>
             </Pressable>
             <Pressable style={styles.secondaryButton} onPress={() => setShowSummary(false)}>
               <Text style={styles.secondaryButtonText}>Edit Order</Text>
@@ -489,38 +525,22 @@ const NewOrderScreen = () => {
         </View>
       </Modal>
 
-      <Modal transparent visible={showPayment} animationType="fade" onRequestClose={() => setShowPayment(false)}>
+      <Modal transparent visible={showOrderAgain} animationType="fade" onRequestClose={() => setShowOrderAgain(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.ticketCap} />
-            <Text style={styles.modalTitle}>Complete Payment</Text>
+            <Text style={styles.modalTitle}>Order Again</Text>
             <Text style={styles.paymentSummaryText}>
-              Pay using {paymentMethod}. Total payable amount: {formatCurrency(totalAmount)}.
+              Place this order again with {quantity} can{quantity > 1 ? 's' : ''} using {paymentMethod} for {formatCurrency(totalAmount)}?
             </Text>
-            {paymentMethod === 'UPI / GPay / PhonePe' ? (
-              <View style={styles.paymentBlock}>
-                <Text style={styles.paymentBlockTitle}>UPI apps supported</Text>
-                <Text style={styles.paymentBlockText}>GPay, PhonePe, Paytm or any UPI app can complete this payment.</Text>
-              </View>
-            ) : null}
-            {paymentMethod === 'Cash on Delivery' ? (
-              <View style={styles.paymentBlock}>
-                <Text style={styles.paymentBlockTitle}>Cash on delivery</Text>
-                <Text style={styles.paymentBlockText}>Please keep the amount ready if possible for a faster handoff.</Text>
-              </View>
-            ) : null}
-            {paymentMethod === 'Wallet balance' ? (
-              <View style={styles.paymentBlock}>
-                <Text style={styles.paymentBlockTitle}>Wallet checkout</Text>
-                <Text style={styles.paymentBlockText}>The order amount will be adjusted from your wallet balance.</Text>
-              </View>
-            ) : null}
-            <Pressable style={styles.primaryButton} onPress={handlePlaceOrUpdateOrder} disabled={loading}>
-              <Text style={styles.primaryButtonText}>{loading ? 'Please wait...' : isEditing ? 'Save Order Changes' : 'Place Order'}</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={() => setShowPayment(false)}>
-              <Text style={styles.secondaryButtonText}>Back</Text>
-            </Pressable>
+            <View style={styles.modalActionsInline}>
+              <Pressable style={styles.secondaryButton} onPress={() => setShowOrderAgain(false)}>
+                <Text style={styles.secondaryButtonText}>Back</Text>
+              </Pressable>
+              <Pressable style={styles.primaryButton} onPress={() => handlePlaceOrUpdateOrder(paymentMethod)} disabled={loading}>
+                <Text style={styles.primaryButtonText}>{loading ? 'Please wait...' : 'Order Again'}</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -536,105 +556,6 @@ const styles = StyleSheet.create({
   content: {
     padding: 18,
     paddingBottom: 40
-  },
-  hero: {
-    backgroundColor: '#E3F4EA',
-    borderRadius: 30,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#CFE7D8'
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderWidth: 1,
-    borderColor: '#CFE2D6'
-  },
-  backButtonText: {
-    color: '#216A45',
-    fontSize: 14,
-    fontWeight: '800'
-  },
-  heroBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7
-  },
-  heroBadgeText: {
-    color: '#216A45',
-    fontSize: 12,
-    fontWeight: '800'
-  },
-  title: {
-    marginTop: 12,
-    color: '#173726',
-    fontSize: 28,
-    fontWeight: '900'
-  },
-  subtitle: {
-    marginTop: 8,
-    color: '#4E6E5D',
-    fontSize: 14,
-    lineHeight: 22
-  },
-  heroStatsRow: {
-    marginTop: 18,
-    gap: 10
-  },
-  heroStat: {
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.84)',
-    padding: 14
-  },
-  heroStatValue: {
-    color: '#173726',
-    fontSize: 16,
-    fontWeight: '900'
-  },
-  heroStatLabel: {
-    marginTop: 4,
-    color: '#5A7968',
-    fontSize: 12,
-    fontWeight: '700'
-  },
-  stepRow: {
-    marginTop: 14,
-    flexDirection: 'row',
-    gap: 10
-  },
-  stepItem: {
-    flex: 1,
-    alignItems: 'center',
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 8
-  },
-  stepIndex: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#216A45',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  stepIndexText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '900'
-  },
-  stepText: {
-    marginTop: 8,
-    color: '#1E3B2A',
-    fontSize: 12,
-    fontWeight: '800'
   },
   addressCard: {
     backgroundColor: '#FFFFFF',
@@ -924,6 +845,72 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700'
   },
+  successBanner: {
+    marginTop: 16,
+    backgroundColor: '#E7F7EA',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#1E7A45'
+  },
+  successBannerText: {
+    color: '#1E7A45',
+    fontSize: 15,
+    fontWeight: '900'
+  },
+  packRow: {
+    marginTop: 14,
+    gap: 10
+  },
+  packChip: {
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: '#F7FBF8',
+    borderWidth: 1.5,
+    borderColor: '#DCE8E0'
+  },
+  packChipSelected: {
+    backgroundColor: '#E7F7EA',
+    borderColor: '#216A45'
+  },
+  packChipOutOfStock: {
+    opacity: 0.6,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FFF5F5'
+  },
+  packChipLabel: {
+    color: '#173726',
+    fontSize: 16,
+    fontWeight: '900'
+  },
+  packChipLabelSelected: {
+    color: '#216A45'
+  },
+  packChipQty: {
+    color: '#6B8174',
+    fontSize: 13,
+    marginTop: 4
+  },
+  packChipQtySelected: {
+    color: '#216A45'
+  },
+  packOutOfStockText: {
+    marginTop: 6,
+    color: '#DC2626',
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  clearPackBtn: {
+    marginTop: 12,
+    alignSelf: 'flex-start'
+  },
+  clearPackBtnText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '700'
+  },
   primaryButton: {
     marginTop: 16,
     backgroundColor: '#216A45',
@@ -1010,6 +997,11 @@ const styles = StyleSheet.create({
     color: '#547185',
     fontSize: 14,
     lineHeight: 21
+  },
+  modalActionsInline: {
+    marginTop: 18,
+    flexDirection: 'row',
+    gap: 12
   },
   paymentBlock: {
     marginTop: 14,

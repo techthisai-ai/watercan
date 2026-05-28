@@ -4,8 +4,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthContext } from '../../App';
 import CustomerHomeScreen from '../screens/CustomerHomeScreen';
 import CustomerOrdersScreen from '../screens/CustomerOrdersScreen';
-import CustomerSubscriptionScreen from '../screens/CustomerSubscriptionScreen';
+import CustomerPayScreen from '../screens/CustomerPayScreen';
 import CustomerWalletScreen from '../screens/CustomerWalletScreen';
+import CustomerNotificationsScreen from '../screens/CustomerNotificationsScreen';
 import LoadingScreen from '../screens/LoadingScreen';
 import LoginScreen from '../screens/LoginScreen';
 import NewOrderScreen from '../screens/NewOrderScreen';
@@ -22,12 +23,13 @@ import SignupScreen from '../screens/SignupScreen';
 
 export type RootStackParamList = {
   Login: undefined;
-  Signup: undefined;
-  CustomerHome: undefined;
+  Signup: { phone?: string } | undefined;
+  CustomerHome: { reorderOrderId?: string; editOrderId?: string } | undefined;
   CustomerOrders: undefined;
-  CustomerSubscription: undefined;
+  CustomerPay: undefined;
   CustomerWallet: undefined;
-  OwnerHome: undefined;
+  CustomerNotifications: undefined;
+  OwnerHome: { editOrderId?: string; editQuantity?: number } | undefined;
   NewOrder: { orderId?: string; reorder?: boolean } | undefined;
   OrderConfirmed: { orderId: string };
   OrderTracking: { orderId?: string } | undefined;
@@ -44,7 +46,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const AppNavigator = () => {
   const { user, profile, initializing } = useContext(AuthContext);
 
-  if (initializing) {
+  if (initializing || (user && !profile)) {
     return <LoadingScreen />;
   }
 
@@ -70,8 +72,9 @@ const AppNavigator = () => {
           <>
             <Stack.Screen name="CustomerHome" component={CustomerHomeScreen} />
             <Stack.Screen name="CustomerOrders" component={CustomerOrdersScreen} />
-            <Stack.Screen name="CustomerSubscription" component={CustomerSubscriptionScreen} />
+            <Stack.Screen name="CustomerPay" component={CustomerPayScreen} />
             <Stack.Screen name="CustomerWallet" component={CustomerWalletScreen} />
+            <Stack.Screen name="CustomerNotifications" component={CustomerNotificationsScreen} />
             <Stack.Screen name="NewOrder" component={NewOrderScreen} />
             <Stack.Screen name="OrderConfirmed" component={OrderConfirmedScreen} />
             <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />

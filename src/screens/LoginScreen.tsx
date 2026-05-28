@@ -4,17 +4,26 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthContext } from '../../App';
 import AppIcon from '../components/AppIcon';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { signInWithPhone } from '../services/firebaseService';
+import { getFriendlyFirebaseAuthMessage, signInWithPhone } from '../services/firebaseService';
 import { useLang } from '../i18n/LanguageContext';
 import { createShadow } from '../styles/shadows';
-import { theme, typography } from '../styles/theme';
+import { theme } from '../styles/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
+
+const PHONE_COUNTRY_CODE = '+91';
+const normalizePhoneInput = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  return digits.startsWith('91') && digits.length > 10
+    ? digits.slice(2, 12)
+    : digits.slice(0, 10);
+};
 
 const LoginScreen = ({ navigation }: Props) => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [phoneFocused, setPhoneFocused] = useState(false);
   const { profile, authError } = useContext(AuthContext);
   const { t } = useLang();
 
@@ -24,24 +33,31 @@ const LoginScreen = ({ navigation }: Props) => {
     }
   }, [authError]);
 
+  const handlePhoneChange = (value: string) => {
+    setPhone(normalizePhoneInput(value));
+  };
+
   const handleLogin = async () => {
     if (!phone.trim()) {
       setErrorMessage('Please provide your phone number.');
+      return;
+    }
+    if (phone.length !== 10) {
+      setErrorMessage('Please enter a valid 10 digit phone number.');
       return;
     }
     setLoading(true);
     setErrorMessage('');
     try {
       await signInWithPhone(phone.trim());
+      // Navigation handled automatically by onAuthStateChanged in App.tsx
     } catch (error: any) {
       const code = error?.code as string | undefined;
       if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
         setErrorMessage('Phone number not found. Please sign up first.');
-        navigation.navigate('Signup');
-      } else if (code === 'auth/network-request-failed') {
-        setErrorMessage('Connection blocked. Disable browser blocker or extension and try again.');
+        navigation.navigate('Signup', { phone: phone.trim() });
       } else {
-        setErrorMessage(error.message || 'Unable to sign in.');
+        setErrorMessage(getFriendlyFirebaseAuthMessage(error, 'login'));
       }
     } finally {
       setLoading(false);
@@ -60,62 +76,47 @@ const LoginScreen = ({ navigation }: Props) => {
             </View>
             <View style={styles.brandCopy}>
               <Text style={styles.brand}>{t.appName}</Text>
-              <Text style={styles.brandTag}>Light, clean, fast ordering</Text>
             </View>
           </View>
-          <Text style={styles.title}>{t.signInTitle}</Text>
-          <Text style={styles.subtitle}>
-            A lighter iPhone-style layout with your deliveries, payments, and account actions exactly where users expect them.
-          </Text>
-          <View style={styles.featureRow}>
-            <View style={styles.featureChip}>
-              <AppIcon name="star-outline" size={16} color={theme.colors.primary} />
-              <Text style={styles.featureText}>Fast sign-in</Text>
+          <View style={styles.loginPanel}>
+            <View style={styles.inputLabelRow}>
+              <Text style={styles.formLabel}>{t.phoneNumber}</Text>
+              <AppIcon name="call-outline" size={16} color={theme.colors.textTertiary} />
             </View>
-            <View style={styles.featureChip}>
-              <AppIcon name="shield-checkmark-outline" size={16} color={theme.colors.secondary} />
-              <Text style={styles.featureText}>Secure access</Text>
+            <View style={[styles.inputShell, phoneFocused && styles.inputShellFocused]}>
+              <View style={styles.inputIconCell}>
+                <AppIcon name="phone-portrait-outline" size={18} color={phoneFocused ? theme.colors.primary : theme.colors.textTertiary} />
+              </View>
+              <Text style={styles.phonePrefix}>{PHONE_COUNTRY_CODE}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="9900002222"
+                placeholderTextColor={theme.colors.textTertiary}
+                value={phone}
+                keyboardType="phone-pad"
+                maxLength={10}
+                onChangeText={handlePhoneChange}
+                onFocus={() => setPhoneFocused(true)}
+                onBlur={() => setPhoneFocused(false)}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
             </View>
-          </View>
-        </View>
+            <Text style={styles.helperText}>Enter the 10 digit phone number you registered with.</Text>
+            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-        <View style={styles.formCard}>
-          <View style={styles.inputLabelRow}>
-            <Text style={styles.formLabel}>{t.phoneNumber}</Text>
-            <AppIcon name="call-outline" size={16} color={theme.colors.textTertiary} />
-          </View>
-          <View style={styles.inputShell}>
-            <AppIcon name="phone-portrait-outline" size={18} color={theme.colors.textTertiary} />
-            <TextInput
-              style={styles.input}
-              placeholder="+91 99000 02222"
-              placeholderTextColor={theme.colors.textTertiary}
-              value={phone}
-              keyboardType="phone-pad"
-              onChangeText={setPhone}
-            />
-          </View>
-          <Text style={styles.helperText}>Use the same number you registered with, including the country code.</Text>
-          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && styles.primaryButtonPressed,
-              loading && styles.buttonDisabled
-            ]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            <AppIcon name="arrow-forward-circle" size={18} color="#fff" />
-            <Text style={styles.primaryButtonText}>{loading ? t.signingIn : t.continue}</Text>
-          </Pressable>
-
-          <View style={styles.secondaryCard}>
-            <AppIcon name="lock-closed-outline" size={18} color={theme.colors.textSecondary} />
-            <Text style={styles.secondaryCardText}>
-              Customers can order after approval. Owners get order, inventory, and customer controls.
-            </Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.primaryButtonPressed,
+                loading && styles.buttonDisabled
+              ]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              <AppIcon name="arrow-forward-circle" size={18} color="#fff" />
+              <Text style={styles.primaryButtonText}>{loading ? t.signingIn : t.continue}</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -188,52 +189,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: theme.colors.text
   },
-  brandTag: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '700'
-  },
-  title: {
-    ...typography.title,
-    color: theme.colors.text,
-    marginTop: 20
-  },
-  subtitle: {
-    ...typography.body,
-    color: theme.colors.textSecondary,
-    marginTop: 10
-  },
-  featureRow: {
-    marginTop: 16,
-    flexDirection: 'row',
-    gap: 10,
-    flexWrap: 'wrap'
-  },
-  featureChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.stroke
-  },
-  featureText: {
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: '700'
-  },
-  formCard: {
-    marginTop: 18,
-    backgroundColor: theme.colors.surface,
-    borderRadius: 28,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: theme.colors.stroke,
-    ...createShadow({ color: '#163456', opacity: 0.1, radius: 20, elevation: 8 })
+  loginPanel: {
+    marginTop: 16
   },
   inputLabelRow: {
     flexDirection: 'row',
@@ -251,18 +208,38 @@ const styles = StyleSheet.create({
   inputShell: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: theme.colors.stroke,
-    paddingHorizontal: 14
+    overflow: 'hidden'
+  },
+  inputShellFocused: {
+    borderColor: '#1A7FD4',
+    backgroundColor: '#EAF4FF',
+    ...createShadow({ color: '#1A7FD4', opacity: 0.18, radius: 10, elevation: 3 })
+  },
+  inputIconCell: {
+    width: 42,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.28)'
   },
   input: {
     flex: 1,
     color: theme.colors.text,
     fontSize: 17,
-    paddingVertical: 15
+    paddingVertical: 15,
+    paddingRight: 14,
+    outlineStyle: 'none'
+  },
+  phonePrefix: {
+    color: theme.colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    paddingLeft: 12,
+    paddingRight: 8
   },
   helperText: {
     color: theme.colors.textSecondary,
@@ -295,21 +272,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.7
-  },
-  secondaryCard: {
-    marginTop: 14,
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'flex-start',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 18,
-    padding: 14
-  },
-  secondaryCardText: {
-    flex: 1,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 20
   },
   linkButton: {
     marginTop: 18,

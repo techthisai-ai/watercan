@@ -3,44 +3,61 @@ import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 import AppIcon from './AppIcon';
 import {
   canCancelOrder,
-  canModifyOrder,
   formatCurrency,
   formatOrderDate,
-  formatOrderNumber,
+  formatOrderReference,
+  formatQuantityLabel,
   ORDER_STATUS_META
 } from '../data/orderModule';
 import { OrderRecord } from '../services/firebaseService';
 import { createShadow } from '../styles/shadows';
 import { theme } from '../styles/theme';
 
+const formatOrderDateTime = (value?: number) => {
+  if (!value) {
+    return 'Today';
+  }
+  const date = formatOrderDate(value);
+  const time = new Date(value).toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  return `${date} ${time}`;
+};
+
 type OrderHistoryCardProps = {
   order: OrderRecord;
-  onViewDetails: () => void;
-  onReorder?: () => void;
+  onPayment: () => void;
   onTrack?: () => void;
   onCancel?: () => void;
-  onModify?: () => void;
 };
 
 const OrderHistoryCard = ({
   order,
-  onViewDetails,
-  onReorder,
+  onPayment,
   onTrack,
-  onCancel,
-  onModify
+  onCancel
 }: OrderHistoryCardProps) => {
   const meta = ORDER_STATUS_META[order.status];
+  const deliveredCans = Math.max(
+    0,
+    Math.min(order.quantity, order.deliveredQuantity ?? (order.status === 'delivered' ? order.quantity : 0))
+  );
+  const pendingCans = Math.max(0, Math.min(order.quantity, order.pendingQuantity ?? (order.quantity - deliveredCans)));
+  const statusLabel =
+    order.status === 'out_for_delivery' && deliveredCans > 0 && pendingCans > 0
+      ? 'Partial'
+      : meta.label;
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.orderNumber}>{formatOrderNumber(order)}</Text>
-          <Text style={styles.dateText}>{formatOrderDate(order.createdAt)}</Text>
+          <Text style={styles.orderNumber}>{formatOrderReference(order)}</Text>
+          <Text style={styles.dateText}>{formatOrderDateTime(order.createdAt)}</Text>
         </View>
         <View style={[styles.statusPill, { backgroundColor: meta.background }]}>
-          <Text style={[styles.statusText, { color: meta.text }]}>{meta.label}</Text>
+          <Text style={[styles.statusText, { color: meta.text }]}>{statusLabel}</Text>
         </View>
       </View>
 
@@ -48,7 +65,7 @@ const OrderHistoryCard = ({
         <View style={styles.infoCell}>
           <AppIcon name="cube-outline" size={16} color={theme.colors.primary} />
           <Text style={styles.infoLabel}>Quantity</Text>
-          <Text style={styles.infoValue}>{order.quantity} cans</Text>
+          <Text style={styles.infoValue}>{formatQuantityLabel(order)}</Text>
         </View>
         <View style={styles.infoCell}>
           <AppIcon name="cash-outline" size={16} color={theme.colors.secondary} />
@@ -65,17 +82,20 @@ const OrderHistoryCard = ({
         </View>
         <View style={styles.infoCell}>
           <AppIcon name="checkmark-circle-outline" size={16} color={theme.colors.primary} />
-          <Text style={styles.infoLabel}>Status</Text>
+          <Text style={styles.infoLabel}>Delivery</Text>
           <Text style={styles.infoValue}>
-            {order.paymentStatus === 'paid' ? 'Paid' : order.paymentStatus === 'partial' ? 'Part paid' : 'Pending'}
+            {`${deliveredCans} Cans Delivered`}
+          </Text>
+          <Text style={styles.infoValue}>
+            {`${pendingCans} Cans Pending`}
           </Text>
         </View>
       </View>
 
       <View style={styles.actionRow}>
-        <Pressable style={styles.secondaryButton} onPress={onViewDetails}>
-          <AppIcon name="document-text-outline" size={16} color={theme.colors.primary} />
-          <Text style={styles.secondaryButtonText}>Details</Text>
+        <Pressable style={styles.secondaryButton} onPress={onPayment}>
+          <AppIcon name="card-outline" size={16} color={theme.colors.primary} />
+          <Text style={styles.secondaryButtonText}>Payment</Text>
         </Pressable>
         {onTrack ? (
           <Pressable style={styles.secondaryButton} onPress={onTrack}>
@@ -83,26 +103,13 @@ const OrderHistoryCard = ({
             <Text style={styles.secondaryButtonText}>Track</Text>
           </Pressable>
         ) : null}
-        {onReorder ? (
-          <Pressable style={styles.primaryButton} onPress={onReorder}>
-            <AppIcon name="refresh-outline" size={16} color="#fff" />
-            <Text style={styles.primaryButtonText}>Reorder</Text>
-          </Pressable>
+        {canCancelOrder(order.status) && onCancel ? (
+          <TouchableOpacity style={styles.cancelButtonInline} onPress={onCancel} activeOpacity={0.7}>
+            <AppIcon name="close-circle-outline" size={18} color={theme.colors.danger} />
+            <Text style={styles.cancelButtonText}>Cancel order</Text>
+          </TouchableOpacity>
         ) : null}
       </View>
-
-      {canModifyOrder(order.status) && onModify ? (
-        <Pressable style={styles.textButton} onPress={onModify}>
-          <AppIcon name="create-outline" size={15} color={theme.colors.primary} />
-          <Text style={styles.textButtonText}>Modify quantity or delivery time</Text>
-        </Pressable>
-      ) : null}
-      {canCancelOrder(order.status) && onCancel ? (
-        <TouchableOpacity style={styles.cancelButton} onPress={onCancel} activeOpacity={0.7}>
-          <AppIcon name="close-circle-outline" size={18} color={theme.colors.danger} />
-          <Text style={styles.cancelButtonText}>Cancel order</Text>
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 };
@@ -170,22 +177,6 @@ const styles = StyleSheet.create({
     gap: 10,
     flexWrap: 'wrap'
   },
-  primaryButton: {
-    flex: 1,
-    minWidth: 100,
-    backgroundColor: theme.colors.primary,
-    borderRadius: 18,
-    paddingVertical: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800'
-  },
   secondaryButton: {
     flex: 1,
     minWidth: 100,
@@ -202,22 +193,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800'
   },
-  textButton: {
-    marginTop: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  textButtonText: {
-    color: theme.colors.primary,
-    fontSize: 13,
-    fontWeight: '700'
-  },
-  cancelButton: {
-    marginTop: 12,
+  cancelButtonInline: {
+    flex: 1,
+    minWidth: 100,
     backgroundColor: '#FFF4F3',
-    borderRadius: 16,
-    paddingVertical: 14,
+    borderRadius: 18,
+    paddingVertical: 13,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -232,4 +213,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default OrderHistoryCard;
+export default React.memo(OrderHistoryCard);

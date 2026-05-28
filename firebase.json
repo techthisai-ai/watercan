@@ -1,5 +1,7 @@
 {
   "firestore": {
+    "database": "(default)",
+    "location": "nam5",
     "rules": "firebase.rules",
     "indexes": "firestore.indexes.json"
   },
@@ -13,6 +15,11 @@
     "ui": {
       "enabled": true,
       "port": 4000
+    }
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true
     }
   }
 }

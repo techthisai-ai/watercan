@@ -12,7 +12,7 @@ type TabKey = 'OwnerHome' | 'OwnerOrders' | 'OwnerApprovals' | 'OwnerInventory' 
 const tabs: Array<{ key: TabKey; label: string; icon: string; activeIcon: string }> = [
   { key: 'OwnerHome', label: 'Home', icon: 'grid-outline', activeIcon: 'grid' },
   { key: 'OwnerOrders', label: 'Orders', icon: 'cube-outline', activeIcon: 'cube' },
-  { key: 'OwnerApprovals', label: 'Approvals', icon: 'checkmark-done-outline', activeIcon: 'checkmark-done' },
+  { key: 'OwnerApprovals', label: 'Confirm', icon: 'checkmark-done-outline', activeIcon: 'checkmark-done' },
   { key: 'OwnerInventory', label: 'Stock', icon: 'layers-outline', activeIcon: 'layers' },
   { key: 'OwnerCustomers', label: 'Customers', icon: 'people-outline', activeIcon: 'people' }
 ];

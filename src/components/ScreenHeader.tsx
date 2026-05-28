@@ -1,11 +1,12 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { createShadow } from '../styles/shadows';
 import { theme, typography } from '../styles/theme';
 import AppIcon from './AppIcon';
+import NotificationBell from './NotificationBell';
 
 type Props = {
   eyebrow?: string;
@@ -13,34 +14,51 @@ type Props = {
   subtitle?: string;
   back?: boolean;
   profile?: boolean;
+  notifications?: boolean;
+  titleRight?: React.ReactNode;
 };
 
-const ScreenHeader = ({ eyebrow, title, subtitle, back, profile }: Props) => {
+const ScreenHeader = ({ eyebrow, title, subtitle, back, profile, notifications, titleRight }: Props) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute();
+  const allowHeaderIcons = route.name === 'CustomerHome' || route.name === 'OwnerHome';
+  const showBrandPill = allowHeaderIcons && !back;
+  const showNotificationIcon = allowHeaderIcons && Boolean(notifications);
+  const showProfileIcon = allowHeaderIcons && Boolean(profile);
+  const showTopRow = Boolean(back || showBrandPill || showNotificationIcon || showProfileIcon);
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.topRow}>
-        {back ? (
-          <Pressable style={styles.iconButton} onPress={() => navigation.goBack()}>
-            <AppIcon name="chevron-back" size={20} color={theme.colors.text} />
-          </Pressable>
-        ) : (
-          <View style={styles.brandPill}>
-            <AppIcon name="water" size={16} color={theme.colors.primary} />
-            <Text style={styles.brandText}>Thanni CAN</Text>
+      {showTopRow ? (
+        <View style={styles.topRow}>
+          {back ? (
+            <Pressable style={styles.iconButton} onPress={() => navigation.goBack()}>
+              <AppIcon name="chevron-back" size={20} color={theme.colors.text} />
+            </Pressable>
+          ) : showBrandPill ? (
+            <View style={styles.brandPill}>
+              <AppIcon name="water" size={16} color={theme.colors.primary} />
+              <Text style={styles.brandText}>Thanni CAN</Text>
+            </View>
+          ) : (
+            <View style={styles.placeholder} />
+          )}
+          <View style={styles.rightActions}>
+            {showNotificationIcon ? <NotificationBell /> : null}
+            {showProfileIcon ? (
+              <Pressable style={styles.iconButton} onPress={() => navigation.navigate('Profile')}>
+                <AppIcon name="person-circle-outline" size={22} color={theme.colors.text} />
+              </Pressable>
+            ) : null}
+            {!showProfileIcon && !showNotificationIcon ? <View style={styles.placeholder} /> : null}
           </View>
-        )}
-        {profile ? (
-          <Pressable style={styles.iconButton} onPress={() => navigation.navigate('Profile')}>
-            <AppIcon name="person-circle-outline" size={22} color={theme.colors.text} />
-          </Pressable>
-        ) : (
-          <View style={styles.placeholder} />
-        )}
-      </View>
+        </View>
+      ) : null}
       {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.title}>{title}</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{title}</Text>
+        {titleRight ? <View style={styles.titleRight}>{titleRight}</View> : null}
+      </View>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>
   );
@@ -88,6 +106,11 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42
   },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
   eyebrow: {
     color: theme.colors.primary,
     fontSize: 12,
@@ -97,8 +120,17 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.title,
-    color: theme.colors.text,
-    marginTop: 6
+    color: theme.colors.text
+  },
+  titleRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10
+  },
+  titleRight: {
+    flexShrink: 0
   },
   subtitle: {
     ...typography.body,

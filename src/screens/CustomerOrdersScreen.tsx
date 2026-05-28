@@ -1,14 +1,14 @@
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useCallback, useContext, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, Platform } from 'react-native';
 import { AuthContext } from '../../App';
 import AppIcon from '../components/AppIcon';
 import CustomerBottomNav from '../components/CustomerBottomNav';
 import OrderHistoryCard from '../components/OrderHistoryCard';
 import ScreenHeader from '../components/ScreenHeader';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { cancelOrder, fetchCustomerOrders, OrderRecord } from '../services/firebaseService';
+import { cancelOrder, getFriendlyOrderMessage, OrderRecord, subscribeToCustomerOrders } from '../services/firebaseService';
 import { useLang } from '../i18n/LanguageContext';
 import { createShadow } from '../styles/shadows';
 import { theme } from '../styles/theme';
@@ -21,6 +21,21 @@ const filters: Array<{ key: FilterKey; icon: string }> = [
   { key: 'Delivered', icon: 'checkmark-circle-outline' },
   { key: 'Cancelled', icon: 'close-circle-outline' }
 ];
+const isSameOrderFeed = (prev: OrderRecord[], next: OrderRecord[]) =>
+  prev.length === next.length &&
+  prev.every((order, index) => {
+    const candidate = next[index];
+    return (
+      order.id === candidate?.id &&
+      order.status === candidate?.status &&
+      order.updatedAt === candidate?.updatedAt &&
+      order.deliveredQuantity === candidate?.deliveredQuantity &&
+      order.pendingQuantity === candidate?.pendingQuantity &&
+      order.paymentStatus === candidate?.paymentStatus &&
+      order.paidAmount === candidate?.paidAmount &&
+      !!order.paymentApproved === !!candidate?.paymentApproved
+    );
+  });
 
 const CustomerOrdersScreen = () => {
   const { profile } = useContext(AuthContext);
@@ -30,8 +45,9 @@ const CustomerOrdersScreen = () => {
   const [selectedFilter, setSelectedFilter] = useState<FilterKey>('Active');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(() => {
     if (!profile?.uid) {
       setOrders([]);
       setLoading(false);
@@ -39,26 +55,22 @@ const CustomerOrdersScreen = () => {
     }
     setLoading(true);
     setError('');
-    try {
-      const data = await fetchCustomerOrders(profile.uid);
-      setOrders(data);
-    } catch (e: any) {
-      const msg: string = e?.message ?? '';
-      if (msg.includes('failed-precondition') || msg.includes('index')) {
-        setError('Setting up your orders list. Please wait a moment and refresh.');
-      } else {
-        setError('Could not load orders. Tap to retry.');
-      }
-    } finally {
+
+    return subscribeToCustomerOrders(profile.uid, (data) => {
+      setOrders((current) => (isSameOrderFeed(current, data) ? current : data));
+      setError('');
       setLoading(false);
-    }
+    });
   }, [profile?.uid]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadOrders();
-    }, [loadOrders])
-  );
+  useEffect(() => {
+    const unsubscribe = loadOrders();
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [loadOrders]);
 
   const filteredOrders = useMemo(() => {
     switch (selectedFilter) {
@@ -71,39 +83,78 @@ const CustomerOrdersScreen = () => {
     }
   }, [orders, selectedFilter]);
 
-  const activeOrders = orders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled');
-  const historyOrders = orders.filter((o) => o.status === 'delivered' || o.status === 'cancelled');
+  const activeOrders = useMemo(
+    () => orders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled'),
+    [orders]
+  );
+  const historyOrders = useMemo(
+    () => orders.filter((o) => o.status === 'delivered' || o.status === 'cancelled'),
+    [orders]
+  );
+
+  const cancelSelectedOrder = async (order: OrderRecord) => {
+    if (!order.id || cancellingOrderId) {
+      return;
+    }
+
+    setCancellingOrderId(order.id);
+    try {
+      await cancelOrder(order.id);
+      setOrders((prev) =>
+        prev.map((o) => o.id === order.id ? { ...o, status: 'cancelled' } : o)
+      );
+      setSelectedFilter('Cancelled');
+    } catch (cancelError) {
+      Alert.alert(t.orderFailed, getFriendlyOrderMessage(cancelError));
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
 
   const handleCancel = (order: OrderRecord) => {
-    if (window.confirm(`${t.cancelOrderConfirm}`)) {
-      cancelOrder(order.id!).then(() => {
-        setOrders((prev) =>
-          prev.map((o) => o.id === order.id ? { ...o, status: 'cancelled' } : o)
-        );
-        setSelectedFilter('Cancelled');
-      });
+    if (Platform.OS === 'web') {
+      if (window.confirm(t.cancelOrderConfirm)) {
+        cancelSelectedOrder(order);
+      }
+    } else {
+      Alert.alert(t.cancelOrder, t.cancelOrderConfirm, [
+        { text: t.no, style: 'cancel' },
+        {
+          text: t.yesCancel,
+          style: 'destructive',
+          onPress: () => cancelSelectedOrder(order)
+        }
+      ]);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <ScreenHeader
-          title={t.orders}
-          subtitle={t.ordersSubtitle}
-        />
+        <View style={styles.headerWrap}>
+          <ScreenHeader title={t.orders} profile notifications />
+        </View>
 
         <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
+          <Pressable
+            style={[styles.summaryCard, selectedFilter === 'Active' && styles.summaryCardSelected]}
+            onPress={() => setSelectedFilter('Active')}
+          >
             <AppIcon name="time-outline" size={18} color={theme.colors.warning} />
             <Text style={styles.summaryValue}>{activeOrders.length}</Text>
             <Text style={styles.summaryLabel}>{t.activeOrders}</Text>
-          </View>
-          <View style={styles.summaryCard}>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.summaryCard,
+              (selectedFilter === 'Delivered' || selectedFilter === 'Cancelled') && styles.summaryCardSelected
+            ]}
+            onPress={() => setSelectedFilter('Delivered')}
+          >
             <AppIcon name="albums-outline" size={18} color={theme.colors.primary} />
             <Text style={styles.summaryValue}>{historyOrders.length}</Text>
             <Text style={styles.summaryLabel}>{t.history}</Text>
-          </View>
+          </Pressable>
         </View>
 
         <View style={styles.filterRow}>
@@ -123,8 +174,6 @@ const CustomerOrdersScreen = () => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t.noOrders.replace('{filter}', selectedFilter === 'Active' ? t.active : selectedFilter === 'Delivered' ? t.delivered : t.cancelled).replace('இல்லை', '').trim()} {t.orders}</Text>
-
           {loading ? (
             <View style={styles.centerBox}>
               <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -140,11 +189,9 @@ const CustomerOrdersScreen = () => {
               <View key={order.id} style={styles.orderWrap}>
                 <OrderHistoryCard
                   order={order}
-                  onViewDetails={() => navigation.navigate('OrderDetails', { orderId: order.id! })}
+                  onPayment={() => navigation.navigate('CustomerPay')}
                   onTrack={() => navigation.navigate('OrderTracking', { orderId: order.id })}
-                  onReorder={() => navigation.navigate('NewOrder', { reorder: true })}
-                  onCancel={() => handleCancel(order)}
-                  onModify={() => navigation.navigate('NewOrder', { orderId: order.id })}
+                  onCancel={cancellingOrderId === order.id ? undefined : () => handleCancel(order)}
                 />
               </View>
             ))
@@ -170,11 +217,16 @@ const CustomerOrdersScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   content: { padding: 18, paddingBottom: 120 },
+  headerWrap: { marginBottom: -8 },
   summaryRow: { flexDirection: 'row', gap: 12 },
   summaryCard: {
     flex: 1, borderRadius: 24, padding: 16,
     backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.stroke,
     ...createShadow({ color: '#163456', opacity: 0.08, radius: 16, elevation: 5 })
+  },
+  summaryCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: '#EEF6FF'
   },
   summaryValue: { marginTop: 14, color: theme.colors.text, fontSize: 24, fontWeight: '800' },
   summaryLabel: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13 },

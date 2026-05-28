@@ -14,13 +14,19 @@ const ProfileScreen = () => {
   const { profile, signOut, setProfile } = useContext(AuthContext);
   const { language, setLanguage, t } = useLang();
   const LANGUAGES: Language[] = ['English', 'Tamil'];
-  const [address, setAddress] = useState('');
+  const [doorNo, setDoorNo] = useState('');
+  const [street, setStreet] = useState('');
+  const [place, setPlace] = useState('');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    setAddress(profile?.address ?? '');
+    const rawAddress = (profile?.address ?? '').trim();
+    const [part1 = '', part2 = '', ...rest] = rawAddress.split(',').map((item) => item.trim());
+    setDoorNo(part1);
+    setStreet(part2);
+    setPlace(rest.join(', '));
     setEditing(!profile?.address?.trim());
   }, [profile]);
 
@@ -28,7 +34,7 @@ const ProfileScreen = () => {
     if (!profile) return;
     setSaving(true);
     setMessage('');
-    const nextAddress = address.trim();
+    const nextAddress = [doorNo.trim(), street.trim(), place.trim()].filter(Boolean).join(', ');
     setProfile((current) => (current ? { ...current, address: nextAddress } : current));
     try {
       await updateUserProfile(profile.uid, { address: nextAddress });
@@ -44,7 +50,13 @@ const ProfileScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <ScreenHeader back title={t.profile} subtitle="" />
+        <View style={styles.profileHeader}>
+          <ScreenHeader back title={t.profile} subtitle="" />
+          <Pressable style={styles.signOutButton} onPress={signOut}>
+            <AppIcon name="log-out-outline" size={15} color={theme.colors.danger} />
+            <Text style={styles.signOutText}>{t.signOut}</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.heroCard}>
           <View style={styles.avatar}>
@@ -58,16 +70,6 @@ const ProfileScreen = () => {
                 <AppIcon name={profile?.role === 'owner' ? 'business-outline' : 'home-outline'} size={14} color={theme.colors.primary} />
                 <Text style={styles.badgeText}>{profile?.role === 'owner' ? t.owner : t.customer}</Text>
               </View>
-              {profile?.role === 'customer' ? (
-                <View style={[styles.badge, profile.approved ? styles.approvedBadge : styles.pendingBadge]}>
-                  <AppIcon
-                    name={profile.approved ? 'checkmark-circle' : 'time-outline'}
-                    size={14}
-                    color={profile.approved ? theme.colors.secondary : theme.colors.warning}
-                  />
-                  <Text style={styles.badgeText}>{profile.approved ? t.approved : t.pendingApproval}</Text>
-                </View>
-              ) : null}
             </View>
           </View>
         </View>
@@ -91,19 +93,53 @@ const ProfileScreen = () => {
           ) : (
             <>
               <Text style={styles.sectionSubtitle}>{t.keepAddressUpdated}</Text>
-              <TextInput
-                style={styles.input}
-                value={address}
-                onChangeText={setAddress}
-                placeholder={t.addAddress}
-                placeholderTextColor={theme.colors.textTertiary}
-                multiline
-                numberOfLines={4}
-                autoFocus={editing && !!profile?.address?.trim()}
-              />
+              <View style={styles.addressInputsWrap}>
+                <View style={styles.addressInputCell}>
+                  <Text style={styles.addressInputLabel}>Door No</Text>
+                  <TextInput
+                    style={styles.addressInput}
+                    value={doorNo}
+                    onChangeText={setDoorNo}
+                    placeholder="Door No"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    autoFocus={editing && !!profile?.address?.trim()}
+                  />
+                </View>
+                <View style={styles.addressInputCell}>
+                  <Text style={styles.addressInputLabel}>Street</Text>
+                  <TextInput
+                    style={styles.addressInput}
+                    value={street}
+                    onChangeText={setStreet}
+                    placeholder="Street"
+                    placeholderTextColor={theme.colors.textTertiary}
+                  />
+                </View>
+                <View style={styles.addressInputCell}>
+                  <Text style={styles.addressInputLabel}>Place</Text>
+                  <TextInput
+                    style={styles.addressInput}
+                    value={place}
+                    onChangeText={setPlace}
+                    placeholder="Place"
+                    placeholderTextColor={theme.colors.textTertiary}
+                  />
+                </View>
+              </View>
               <View style={styles.buttonRow}>
                 {profile?.address?.trim() ? (
-                  <Pressable style={styles.cancelButton} onPress={() => { setAddress(profile.address ?? ''); setEditing(false); setMessage(''); }}>
+                  <Pressable
+                    style={styles.cancelButton}
+                    onPress={() => {
+                      const rawAddress = (profile.address ?? '').trim();
+                      const [part1 = '', part2 = '', ...rest] = rawAddress.split(',').map((item) => item.trim());
+                      setDoorNo(part1);
+                      setStreet(part2);
+                      setPlace(rest.join(', '));
+                      setEditing(false);
+                      setMessage('');
+                    }}
+                  >
                     <Text style={styles.cancelButtonText}>{t.cancel}</Text>
                   </Pressable>
                 ) : null}
@@ -135,10 +171,6 @@ const ProfileScreen = () => {
           </View>
         </View>
 
-        <Pressable style={styles.signOutButton} onPress={signOut}>
-          <AppIcon name="log-out-outline" size={18} color={theme.colors.danger} />
-          <Text style={styles.signOutText}>{t.signOut}</Text>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -152,6 +184,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 18
+  },
+  profileHeader: {
+    position: 'relative'
   },
   heroCard: {
     flexDirection: 'row',
@@ -288,12 +323,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21
   },
-  input: {
+  addressInputsWrap: {
     marginTop: 16,
+    gap: 12
+  },
+  addressInputCell: {
+    width: '100%'
+  },
+  addressInputLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6
+  },
+  addressInput: {
     borderRadius: 22,
     padding: 16,
-    minHeight: 112,
-    textAlignVertical: 'top',
+    minHeight: 56,
     color: theme.colors.text,
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: 1,
@@ -323,18 +369,23 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   signOutButton: {
-    marginTop: 16,
+    position: 'absolute',
+    top: 0,
+    right: 0,
     borderRadius: 18,
-    paddingVertical: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: '#FFF4F3',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#FFD8D4'
   },
   signOutText: {
     color: theme.colors.danger,
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '800'
   },
   langRow: {

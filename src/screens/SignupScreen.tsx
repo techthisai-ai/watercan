@@ -3,36 +3,57 @@ import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AppIcon from '../components/AppIcon';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { registerUserWithPhone } from '../services/firebaseService';
+import { getFriendlyFirebaseAuthMessage, registerUserWithPhone } from '../services/firebaseService';
 import { useLang } from '../i18n/LanguageContext';
 import { createShadow } from '../styles/shadows';
-import { theme, typography } from '../styles/theme';
+import { theme } from '../styles/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Signup'>;
 
-const SignupScreen = ({ navigation }: Props) => {
+const PHONE_COUNTRY_CODE = '+91';
+const normalizePhoneInput = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  return digits.startsWith('91') && digits.length > 10
+    ? digits.slice(2, 12)
+    : digits.slice(0, 10);
+};
+
+const SignupScreen = ({ navigation, route }: Props) => {
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(() => normalizePhoneInput(route.params?.phone ?? ''));
+  const [doorNo, setDoorNo] = useState('');
+  const [street, setStreet] = useState('');
+  const [place, setPlace] = useState('');
   const [role, setRole] = useState<'customer' | 'owner'>('customer');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [focusedField, setFocusedField] = useState<'phone' | 'name' | 'door_no' | 'street' | 'place' | null>(null);
   const { t } = useLang();
+  const address = [doorNo.trim(), street.trim(), place.trim()].filter(Boolean).join(', ');
 
   const handleSignup = async () => {
-    if (!name.trim() || !phone.trim()) {
-      setErrorMessage('Please provide your name and phone number.');
+    if (!name.trim() || !phone.trim() || !address.trim()) {
+      setErrorMessage('Please provide your phone number, full name, and address.');
+      return;
+    }
+    if (phone.length !== 10) {
+      setErrorMessage('Please enter a valid 10 digit phone number.');
       return;
     }
     setLoading(true);
     setErrorMessage('');
     try {
-      const profile = await registerUserWithPhone(name.trim(), phone.trim(), role);
+      await registerUserWithPhone(name.trim(), phone.trim(), role, address.trim());
       // Navigation is handled automatically by AppNavigator based on profile.role
     } catch (error: any) {
-      setErrorMessage(error.message || 'Unable to create account.');
+      setErrorMessage(getFriendlyFirebaseAuthMessage(error, 'signup'));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePhoneChange = (value: string) => {
+    setPhone(normalizePhoneInput(value));
   };
 
   return (
@@ -50,75 +71,134 @@ const SignupScreen = ({ navigation }: Props) => {
               <Text style={styles.backChipText}>{t.signIn}</Text>
             </Pressable>
           </View>
-          <Text style={styles.title}>Create a clean, simple delivery account</Text>
-          <Text style={styles.subtitle}>
-            Choose whether this account manages deliveries or places them. The design follows a light iPhone-style layout with roomy cards and clear actions.
-          </Text>
+          <View style={styles.heroFields}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t.fullName}</Text>
+              <View style={[styles.inputShell, focusedField === 'name' && styles.inputShellFocused]}>
+                <View style={styles.inputIconCell}>
+                  <AppIcon name="person-outline" size={18} color={focusedField === 'name' ? theme.colors.primary : theme.colors.textTertiary} />
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Your full name"
+                  placeholderTextColor={theme.colors.textTertiary}
+                  value={name}
+                  onChangeText={setName}
+                  onFocus={() => setFocusedField('name')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t.phoneNumber}</Text>
+              <View style={[styles.inputShell, focusedField === 'phone' && styles.inputShellFocused]}>
+                <View style={styles.inputIconCell}>
+                  <AppIcon name="call-outline" size={18} color={focusedField === 'phone' ? theme.colors.primary : theme.colors.textTertiary} />
+                </View>
+                <Text style={styles.phonePrefix}>{PHONE_COUNTRY_CODE}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="9900001111"
+                  placeholderTextColor={theme.colors.textTertiary}
+                  value={phone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  onChangeText={handlePhoneChange}
+                  onFocus={() => setFocusedField('phone')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+              <Text style={styles.helperText}>Enter your 10 digit phone number.</Text>
+            </View>
+
+            <View style={styles.inputGroupLast}>
+              <Text style={styles.label}>{t.deliveryAddress}</Text>
+              <View style={styles.addressFields}>
+                <View style={[styles.inputShell, focusedField === 'door_no' && styles.inputShellFocused]}>
+                  <View style={styles.inputIconCell}>
+                    <AppIcon name="location-outline" size={18} color={focusedField === 'door_no' ? theme.colors.primary : theme.colors.textTertiary} />
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Door No"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={doorNo}
+                    onChangeText={setDoorNo}
+                    onFocus={() => setFocusedField('door_no')}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                </View>
+                <View style={[styles.inputShell, focusedField === 'street' && styles.inputShellFocused]}>
+                  <View style={styles.inputIconCell}>
+                    <AppIcon name="navigate-outline" size={18} color={focusedField === 'street' ? theme.colors.primary : theme.colors.textTertiary} />
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Street"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={street}
+                    onChangeText={setStreet}
+                    onFocus={() => setFocusedField('street')}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                </View>
+                <View style={[styles.inputShell, focusedField === 'place' && styles.inputShellFocused]}>
+                  <View style={styles.inputIconCell}>
+                    <AppIcon name="business-outline" size={18} color={focusedField === 'place' ? theme.colors.primary : theme.colors.textTertiary} />
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Place"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={place}
+                    onChangeText={setPlace}
+                    onFocus={() => setFocusedField('place')}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
         </View>
 
         <View style={styles.formCard}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t.fullName}</Text>
-            <View style={styles.inputShell}>
-              <AppIcon name="person-outline" size={18} color={theme.colors.textTertiary} />
-              <TextInput
-                style={styles.input}
-                placeholder="Your full name"
-                placeholderTextColor={theme.colors.textTertiary}
-                value={name}
-                onChangeText={setName}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t.phoneNumber}</Text>
-            <View style={styles.inputShell}>
-              <AppIcon name="call-outline" size={18} color={theme.colors.textTertiary} />
-              <TextInput
-                style={styles.input}
-                placeholder="+91 99000 01111"
-                placeholderTextColor={theme.colors.textTertiary}
-                value={phone}
-                keyboardType="phone-pad"
-                onChangeText={setPhone}
-              />
-            </View>
-            <Text style={styles.helperText}>Include the country code so sign-in matches your account record.</Text>
-          </View>
-
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
           <Text style={styles.roleHeading}>{t.chooseAccountType}</Text>
           <View style={styles.roleRow}>
             <Pressable
-              style={[styles.roleCard, role === 'customer' && styles.roleCardActive]}
+              style={[styles.roleCard, styles.customerCard, role === 'customer' && styles.customerCardActive]}
               onPress={() => setRole('customer')}
             >
-              <View style={[styles.roleIcon, role === 'customer' && styles.roleIconActive]}>
-                <AppIcon
-                  name="home-outline"
-                  size={18}
-                  color={role === 'customer' ? theme.colors.primary : theme.colors.textSecondary}
-                />
+              <View style={styles.roleCardTop}>
+                <View style={[styles.roleIcon, styles.customerIcon, role === 'customer' && styles.customerIconActive]}>
+                  <AppIcon name="home-outline" size={22} color={role === 'customer' ? '#fff' : '#1A7FD4'} />
+                </View>
+                {role === 'customer' && (
+                  <View style={styles.selectedBadge}>
+                    <AppIcon name="checkmark-circle" size={18} color="#1A7FD4" />
+                  </View>
+              )}
               </View>
-              <Text style={[styles.roleTitle, role === 'customer' && styles.roleTitleActive]}>{t.customer}</Text>
-              <Text style={styles.roleDescription}>Order water, track deliveries, manage subscriptions.</Text>
+              <Text style={[styles.roleTitle, role === 'customer' && styles.customerTitleActive]}>{t.customer}</Text>
             </Pressable>
 
             <Pressable
-              style={[styles.roleCard, role === 'owner' && styles.roleCardActive]}
+              style={[styles.roleCard, styles.ownerCard, role === 'owner' && styles.ownerCardActive]}
               onPress={() => setRole('owner')}
             >
-              <View style={[styles.roleIcon, role === 'owner' && styles.roleIconActive]}>
-                <AppIcon
-                  name="business-outline"
-                  size={18}
-                  color={role === 'owner' ? theme.colors.primary : theme.colors.textSecondary}
-                />
+              <View style={styles.roleCardTop}>
+                <View style={[styles.roleIcon, styles.ownerIcon, role === 'owner' && styles.ownerIconActive]}>
+                  <AppIcon name="business-outline" size={22} color={role === 'owner' ? '#fff' : '#1E7A45'} />
+                </View>
+                {role === 'owner' && (
+                  <View style={styles.selectedBadge}>
+                    <AppIcon name="checkmark-circle" size={18} color="#1E7A45" />
+                  </View>
+              )}
               </View>
-              <Text style={[styles.roleTitle, role === 'owner' && styles.roleTitleActive]}>{t.owner}</Text>
-              <Text style={styles.roleDescription}>Run orders, inventory, approvals, and customer operations.</Text>
+              <Text style={[styles.roleTitle, role === 'owner' && styles.ownerTitleActive]}>{t.owner}</Text>
             </Pressable>
           </View>
 
@@ -196,14 +276,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700'
   },
-  title: {
-    ...typography.title,
-    color: theme.colors.text
-  },
-  subtitle: {
-    ...typography.body,
-    color: theme.colors.textSecondary,
-    marginTop: 10
+  heroFields: {
+    marginTop: 18,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.stroke
   },
   formCard: {
     marginTop: 18,
@@ -217,6 +294,12 @@ const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: 14
   },
+  inputGroupLast: {
+    marginBottom: 0
+  },
+  addressFields: {
+    gap: 10
+  },
   label: {
     color: theme.colors.textSecondary,
     fontSize: 13,
@@ -228,18 +311,38 @@ const styles = StyleSheet.create({
   inputShell: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: 1,
     borderColor: theme.colors.stroke,
-    borderRadius: 20
+    borderRadius: 20,
+    overflow: 'hidden'
+  },
+  inputShellFocused: {
+    borderColor: '#1A7FD4',
+    backgroundColor: '#EAF4FF',
+    ...createShadow({ color: '#1A7FD4', opacity: 0.18, radius: 10, elevation: 3 })
+  },
+  inputIconCell: {
+    width: 44,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.28)'
   },
   input: {
     flex: 1,
     paddingVertical: 15,
+    paddingRight: 14,
     color: theme.colors.text,
-    fontSize: 16
+    fontSize: 16,
+    outlineStyle: 'none'
+  },
+  phonePrefix: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    paddingLeft: 12,
+    paddingRight: 8
   },
   helperText: {
     marginTop: 8,
@@ -260,47 +363,78 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   roleRow: {
-    gap: 12
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 18
   },
   roleCard: {
+    flex: 1,
     borderRadius: 22,
     padding: 16,
+    minHeight: 118,
+    borderWidth: 2,
+    borderColor: theme.colors.stroke,
     backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: theme.colors.stroke
+    justifyContent: 'space-between'
   },
-  roleCardActive: {
-    borderColor: '#B8D6FF',
-    backgroundColor: '#F2F8FF'
+  customerCard: {
+    borderColor: '#C8DFF5',
+    backgroundColor: '#F0F7FF'
+  },
+  customerCardActive: {
+    borderColor: '#1A7FD4',
+    backgroundColor: '#E0F0FF'
+  },
+  ownerCard: {
+    borderColor: '#C8E6D0',
+    backgroundColor: '#F0FBF4'
+  },
+  ownerCardActive: {
+    borderColor: '#1E7A45',
+    backgroundColor: '#E0F5E9'
+  },
+  roleCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12
   },
   roleIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface
+    justifyContent: 'center'
   },
-  roleIconActive: {
-    backgroundColor: theme.colors.primarySoft
+  customerIcon: {
+    backgroundColor: '#C8DFF5'
+  },
+  customerIconActive: {
+    backgroundColor: '#1A7FD4'
+  },
+  ownerIcon: {
+    backgroundColor: '#C8E6D0'
+  },
+  ownerIconActive: {
+    backgroundColor: '#1E7A45'
+  },
+  selectedBadge: {
+    alignSelf: 'flex-start'
   },
   roleTitle: {
-    marginTop: 12,
     color: theme.colors.text,
-    fontSize: 16,
-    fontWeight: '800'
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center'
   },
-  roleTitleActive: {
-    color: theme.colors.primary
+  customerTitleActive: {
+    color: '#1A7FD4'
   },
-  roleDescription: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 20
+  ownerTitleActive: {
+    color: '#1E7A45'
   },
   primaryButton: {
-    marginTop: 18,
+    marginTop: 0,
     borderRadius: 20,
     backgroundColor: theme.colors.primary,
     paddingVertical: 16,

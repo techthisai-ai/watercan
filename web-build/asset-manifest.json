@@ -1,0 +1,19 @@
+{
+  "files": {
+    "main.js": "/static/js/main.fc84ec2c.js",
+    "static/js/572.f0e7a90c.js": "/static/js/572.f0e7a90c.js",
+    "static/media/MaterialCommunityIcons.ttf": "/static/media/MaterialCommunityIcons.5d42b4e60858731e7b65.ttf",
+    "static/media/20-l-water-can.png": "/static/media/20-l-water-can.408eb5e67ab3844cc3df.png",
+    "static/media/Ionicons.ttf": "/static/media/Ionicons.3517aeaa34b2f8cd8eef.ttf",
+    "static/media/20-l-water-can1.jpg": "/static/media/20-l-water-can1.b795d767b16c08f6d393.jpg",
+    "index.html": "/index.html",
+    "manifest.json": "/manifest.json",
+    "serve.json": "/serve.json",
+    "main.fc84ec2c.js.map": "/static/js/main.fc84ec2c.js.map",
+    "572.f0e7a90c.js.map": "/static/js/572.f0e7a90c.js.map"
+  },
+  "entrypoints": [
+    "static/js/572.f0e7a90c.js",
+    "static/js/main.fc84ec2c.js"
+  ]
+}

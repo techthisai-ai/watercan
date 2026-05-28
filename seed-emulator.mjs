@@ -25,7 +25,7 @@ const users = [
     phone: '+91 99000 01111',
     password: 'PhoneLogin#1',
     role: 'customer',
-    approved: false
+    approved: true
   },
   {
     name: 'Sample Owner',

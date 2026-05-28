@@ -2,7 +2,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { formatCurrency, formatOrderNumber } from '../data/orderModule';
+import { formatCurrency, formatOrderReference, getCustomerPaymentStatusLabel, getOrderProductType } from '../data/orderModule';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { getOrderById, OrderRecord } from '../services/firebaseService';
 import { useLang } from '../i18n/LanguageContext';
@@ -39,6 +39,9 @@ const OrderConfirmedScreen = () => {
   }, []);
 
   const tickScale = tickAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1.2, 1] });
+  const productType = order ? getOrderProductType(order) : 'Can';
+  const productTypeLabel = `${productType}${(order?.quantity ?? 0) !== 1 ? 's' : ''}`;
+  const paymentLabel = order ? getCustomerPaymentStatusLabel(order) : 'Unpaid';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -73,13 +76,13 @@ const OrderConfirmedScreen = () => {
             <Text style={styles.priceHeroLabel}>{t.finalAmount}</Text>
             <Text style={styles.priceHeroValue}>{formatCurrency(order?.totalAmount ?? 0)}</Text>
             <Text style={styles.priceHeroSubtext}>
-              {order?.paymentMethod || 'Cash on Delivery'} • {order?.quantity ?? 0} {t.cans}
+              {order?.paymentMethod || 'Cash on Delivery'} • {order?.quantity ?? 0} {productTypeLabel}
             </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t.orderNumber}</Text>
-            <Text style={styles.detailValue}>{formatOrderNumber(order)}</Text>
+            <Text style={styles.detailValue}>{formatOrderReference(order)}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t.deliveryWindow}</Text>
@@ -91,7 +94,15 @@ const OrderConfirmedScreen = () => {
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t.paymentStatus}</Text>
-            <Text style={styles.detailValue}>{order?.paymentStatus === 'paid' ? t.paidSuccessfully : t.payOnDelivery}</Text>
+            <Text style={styles.detailValue}>
+              {paymentLabel === 'Approval Pending'
+                ? 'Approval Pending'
+                : paymentLabel === 'Paid'
+                  ? t.paidSuccessfully
+                  : paymentLabel === 'Partial'
+                    ? t.partPaid
+                    : t.payOnDelivery}
+            </Text>
           </View>
 
           <View style={styles.greenNote}>
@@ -102,7 +113,7 @@ const OrderConfirmedScreen = () => {
           </View>
         </View>
 
-        <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('OrderTracking', { orderId: order?.id })}>
+        <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('OrderTracking', { orderId: order?.id ?? route.params.orderId })}>
           <Text style={styles.primaryButtonText}>{t.trackOrder}</Text>
         </Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('NewOrder', { reorder: true })}>
@@ -328,3 +339,4 @@ const styles = StyleSheet.create({
 });
 
 export default OrderConfirmedScreen;
+

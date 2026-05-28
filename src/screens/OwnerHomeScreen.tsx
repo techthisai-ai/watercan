@@ -1,13 +1,13 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthContext } from '../../App';
 import AppIcon from '../components/AppIcon';
 import OwnerBottomNav from '../components/OwnerBottomNav';
 import ScreenHeader from '../components/ScreenHeader';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { fetchOwnerOrders, OrderRecord } from '../services/firebaseService';
+import { fetchInventorySummary, fetchOwnerOrders, InventorySummary, OrderRecord } from '../services/firebaseService';
 import { useLang } from '../i18n/LanguageContext';
 import { createShadow } from '../styles/shadows';
 import { theme } from '../styles/theme';
@@ -16,20 +16,70 @@ const OwnerHomeScreen = () => {
   const { profile } = useContext(AuthContext);
   const { t } = useLang();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute();
+  const [editingOrder, setEditingOrder] = useState<{ id: string; quantity?: number } | null>(null);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
-  const [filter, setFilter] = useState<'Today' | 'This week' | 'Month'>('This week');
+  const [inventory, setInventory] = useState<InventorySummary | null>(null);
+  const [filter, setFilter] = useState<'Today' | 'This week' | 'Month' | 'Year'>('Today');
 
-  useEffect(() => {
-    const loadOrders = async () => {
-      try {
-        const data = await fetchOwnerOrders();
-        setOrders(data);
-      } catch {
-        setOrders([]);
+  const FILTERS = [
+    { key: 'Today' as const,     label: t.today },
+    { key: 'This week' as const, label: t.thisWeek },
+    { key: 'Month' as const,     label: t.month },
+    { key: 'Year' as const,      label: 'Year' },
+  ];
+
+   const lastCallRef = useRef(0);
+
+   useFocusEffect(
+     useCallback(() => {
+       let active = true;
+       const throttleDelay = 5000; // 5 seconds
+
+       const loadOrders = async () => {
+         try {
+           const [data, inv] = await Promise.all([
+             fetchOwnerOrders(),
+             fetchInventorySummary().catch(() => null)
+           ]);
+           if (active) {
+             setOrders(data);
+             setInventory(inv);
+           }
+         } catch {
+           if (active) {
+             setOrders([]);
+             setInventory(null);
+           }
+         }
+       };
+
+       const loadOrdersThrottled = () => {
+         const now = Date.now();
+         if (now - lastCallRef.current >= throttleDelay) {
+           lastCallRef.current = now;
+           loadOrders();
+         }
+       };
+
+       // Initial load
+       loadOrdersThrottled();
+
+       return () => {
+         active = false;
+       };
+     }, [])
+   );
+
+    const editOrderId = (route.params as any)?.editOrderId as string | undefined;
+    const editQuantity = (route.params as any)?.editQuantity as number | undefined;
+    useEffect(() => {
+      if (editOrderId) {
+        // capture the edit request on Home and clear the params so it doesn't trigger again
+        setEditingOrder({ id: editOrderId, quantity: editQuantity });
+        navigation.setParams({ editOrderId: undefined, editQuantity: undefined } as any);
       }
-    };
-    loadOrders();
-  }, []);
+    }, [editOrderId, editQuantity, navigation]);
 
   const filterStart = useMemo(() => {
     const now = new Date();
@@ -39,14 +89,15 @@ const OwnerHomeScreen = () => {
         d.setHours(0, 0, 0, 0);
         return d;
       case 'This week': {
-        const day = d.getDay();
-        const diff = (day + 6) % 7;
+        const diff = (d.getDay() + 6) % 7;
         d.setDate(d.getDate() - diff);
         d.setHours(0, 0, 0, 0);
         return d;
       }
       case 'Month':
         return new Date(d.getFullYear(), d.getMonth(), 1);
+      case 'Year':
+        return new Date(d.getFullYear(), 0, 1);
       default:
         return d;
     }
@@ -57,10 +108,15 @@ const OwnerHomeScreen = () => {
     [orders, filterStart]
   );
 
-  const deliveredOrders = filteredOrders.filter((order) => order.status === 'delivered');
-  const pendingOrders = filteredOrders.filter((order) => order.status !== 'delivered');
-  const revenue = filteredOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+  const deliveredOrders = filteredOrders.filter((o) => o.status === 'delivered');
+  const pendingOrders   = filteredOrders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled');
+  const revenue = deliveredOrders.reduce((sum, o) => sum + o.totalAmount, 0);
   const recentOrders = filteredOrders.slice(0, 4);
+  const totalStock = Math.max((inventory?.openingStock ?? 0) + (inventory?.restockedCans ?? 0), 0);
+  const availableStock = Math.max(
+    Number(inventory?.availableStock ?? (totalStock - (inventory?.soldCans ?? 0))),
+    0
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -68,20 +124,17 @@ const OwnerHomeScreen = () => {
         <ScreenHeader
           eyebrow={profile?.name ? `Owner ${profile.name.split(' ')[0]}` : 'Owner'}
           title={t.ownerDashboard}
-          subtitle="A lighter iPhone-style command center for orders, approvals, inventory, and customer activity."
           profile
         />
 
         <View style={styles.filterRow}>
-          {(['Today', 'This week', 'Month'] as const).map((label) => (
+          {FILTERS.map(({ key, label }) => (
             <Pressable
-              key={label}
-              style={[styles.filterChip, label === filter && styles.filterChipActive]}
-              onPress={() => setFilter(label)}
+              key={key}
+              style={[styles.filterChip, key === filter && styles.filterChipActive]}
+              onPress={() => setFilter(key)}
             >
-              <Text style={[styles.filterText, label === filter && styles.filterTextActive]}>
-                {label === 'Today' ? t.today : label === 'This week' ? t.thisWeek : t.month}
-              </Text>
+              <Text style={[styles.filterText, key === filter && styles.filterTextActive]}>{label}</Text>
             </Pressable>
           ))}
         </View>
@@ -103,9 +156,17 @@ const OwnerHomeScreen = () => {
             <Text style={styles.statLabel}>{t.pending}</Text>
           </Pressable>
           <Pressable style={styles.statCard} onPress={() => navigation.navigate('OwnerOrders')}>
-            <AppIcon name="cash-outline" size={18} color={theme.colors.text} />
-            <Text style={styles.statValue}>Rs {revenue}</Text>
-            <Text style={styles.statLabel}>{t.revenue}</Text>
+            <AppIcon name="cash-outline" size={18} color="#16A34A" />
+            <Text style={[styles.statValue, styles.revenueValue]}>Rs {revenue.toFixed(0)}</Text>
+            <Text style={styles.statLabel}>{t.revenue} (delivered)</Text>
+          </Pressable>
+          <Pressable style={styles.statCard} onPress={() => navigation.navigate('OwnerInventory')}>
+            <Text style={styles.statValue}>{totalStock}</Text>
+            <Text style={styles.statLabel}>Total Stock</Text>
+          </Pressable>
+          <Pressable style={[styles.statCard, availableStock <= 5 && styles.statCardLow]} onPress={() => navigation.navigate('OwnerInventory')}>
+            <Text style={[styles.statValue, availableStock <= 5 && styles.statValueLow]}>{availableStock}</Text>
+            <Text style={styles.statLabel}>Available Stock{availableStock <= 5 ? ' ⚠️' : ''}</Text>
           </Pressable>
         </View>
 
@@ -121,7 +182,7 @@ const OwnerHomeScreen = () => {
               <Pressable
                 key={order.id}
                 style={styles.orderRow}
-                onPress={() => navigation.navigate('OrderDetails', { orderId: order.id! })}
+                onPress={() => navigation.navigate('OwnerOrders')}
               >
                 <View style={styles.orderIcon}>
                   <AppIcon name="cube-outline" size={18} color={theme.colors.primary} />
@@ -140,28 +201,6 @@ const OwnerHomeScreen = () => {
           )}
         </View>
 
-        <View style={styles.doubleRow}>
-          <View style={[styles.card, styles.halfCard]}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>{t.approvalsTitle}</Text>
-              <AppIcon name="checkmark-done-outline" size={18} color={theme.colors.secondary} />
-            </View>
-            <Text style={styles.cardBodyText}>{t.approvalsBody}</Text>
-            <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('OwnerApprovals')}>
-              <Text style={styles.secondaryButtonText}>{t.openApprovals}</Text>
-            </Pressable>
-          </View>
-          <View style={[styles.card, styles.halfCard]}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>{t.inventoryTitle}</Text>
-              <AppIcon name="layers-outline" size={18} color={theme.colors.primary} />
-            </View>
-            <Text style={styles.cardBodyText}>{t.inventoryBody}</Text>
-            <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('OwnerInventory')}>
-              <Text style={styles.secondaryButtonText}>{t.openInventory}</Text>
-            </Pressable>
-          </View>
-        </View>
       </ScrollView>
       <OwnerBottomNav active="OwnerHome" />
     </SafeAreaView>
@@ -216,7 +255,8 @@ const styles = StyleSheet.create({
   filterRow: {
     marginTop: 16,
     flexDirection: 'row',
-    gap: 10
+    gap: 10,
+    flexWrap: 'wrap'
   },
   filterChip: {
     borderRadius: theme.radius.pill,
@@ -245,7 +285,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap'
   },
   statCard: {
-    width: '48%',
+    width: '31%',
     borderRadius: 24,
     padding: 16,
     backgroundColor: theme.colors.surface,
@@ -264,6 +304,16 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 13
   },
+  revenueValue: {
+    color: '#16A34A'
+  },
+  statCardLow: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FFF5F5'
+  },
+  statValueLow: {
+    color: '#DC2626'
+  },
   card: {
     marginTop: 16,
     borderRadius: 28,
@@ -272,9 +322,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.stroke,
     ...createShadow({ color: '#163456', opacity: 0.08, radius: 16, elevation: 5 })
-  },
-  halfCard: {
-    minHeight: 188
   },
   cardHeader: {
     flexDirection: 'row',
@@ -333,27 +380,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: theme.colors.textSecondary,
     fontSize: 14
-  },
-  doubleRow: {
-    gap: 16
-  },
-  cardBodyText: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21
-  },
-  secondaryButton: {
-    marginTop: 16,
-    borderRadius: 18,
-    backgroundColor: theme.colors.primarySoft,
-    paddingVertical: 13,
-    alignItems: 'center'
-  },
-  secondaryButtonText: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    fontWeight: '800'
   }
 });
 

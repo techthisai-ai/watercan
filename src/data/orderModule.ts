@@ -19,14 +19,14 @@ export const PAYMENT_OPTIONS = [
     subtitle: 'Pay the delivery person after the cans arrive'
   },
   {
-    id: 'UPI / GPay / PhonePe',
-    title: 'UPI / GPay / PhonePe',
-    subtitle: 'Fast payment using any UPI app'
+    id: 'UPI ID',
+    title: 'UPI ID',
+    subtitle: 'Pay directly to the shop UPI ID'
   },
   {
-    id: 'Wallet balance',
-    title: 'Wallet balance',
-    subtitle: 'Use your saved wallet money'
+    id: 'Google Pay',
+    title: 'Google Pay',
+    subtitle: 'Complete payment with Google Pay'
   }
 ] as const;
 
@@ -99,10 +99,72 @@ export const OWNER_STATUS_GROUPS: Array<{ key: OrderStatus; label: string }> = [
   { key: 'cancelled', label: 'Cancelled Orders' }
 ];
 
-export const formatCurrency = (amount: number) => `Rs ${amount.toFixed(0)}`;
+export const formatQuantityLabel = (
+  order: Pick<OrderRecord, 'quantity' | 'orderType' | 'packName' | 'productName' | 'variantSize'>
+) => {
+  const productType = getOrderProductType(order);
+  const pluralType = `${productType}${order.quantity !== 1 ? 's' : ''}`;
+  if (order.orderType === 'bulk') {
+    const packSize = order.packName?.match(/(\d+)/)?.[1];
+    if (packSize) {
+      const packets = Math.round(order.quantity / Number(packSize));
+      return `${packets} packet${packets !== 1 ? 's' : ''} (${order.quantity} ${pluralType})`;
+    }
+    return `${order.quantity} ${pluralType} (bulk)`;
+  }
+  return `${order.quantity} ${pluralType}`;
+};
 
-export const formatOrderNumber = (order?: Pick<OrderRecord, 'orderNumber'> | null) =>
-  `#${String(order?.orderNumber ?? 0).padStart(5, '0')}`;
+export const getOrderProductType = (
+  order: Pick<OrderRecord, 'productName' | 'orderType' | 'packName' | 'variantSize'>
+) => {
+  const raw = `${order.productName ?? ''} ${order.variantSize ?? ''} ${order.packName ?? ''}`.toLowerCase();
+  if (raw.includes('bottle') || raw.includes('ml') || raw.includes(' litre') || raw.includes(' liter')) {
+    return 'Bottle' as const;
+  }
+  return 'Can' as const;
+};
+
+export const formatCurrency = (amount: number) => {
+  const hasFraction = Math.abs(amount % 1) > 0.000001;
+  return `Rs ${hasFraction ? amount.toFixed(2).replace(/\.?0+$/, '') : amount.toFixed(0)}`;
+};
+
+export const formatOrderNumber = (order?: Pick<OrderRecord, 'orderNumber' | 'id'> | null) => {
+  const rawNumber = Number(order?.orderNumber ?? 0);
+  if (Number.isFinite(rawNumber) && rawNumber > 0) {
+    return `#${String(Math.floor(rawNumber)).padStart(5, '0')}`;
+  }
+  const fallback = order?.id ? order.id.slice(-5).toUpperCase() : '-----';
+  return `#${fallback}`;
+};
+
+export const formatOrderReference = (order?: Pick<OrderRecord, 'orderNumber' | 'id'> | null) => {
+  const rawNumber = Number(order?.orderNumber ?? 0);
+  if (Number.isFinite(rawNumber) && rawNumber > 0) {
+    return `#${String(Math.floor(rawNumber)).padStart(5, '0')}`;
+  }
+  const fallback = order?.id ? order.id.slice(-5).toUpperCase() : '-----';
+  return `#${fallback}`;
+};
+
+export const getCustomerPaymentStatusLabel = (
+  order: Pick<OrderRecord, 'paymentStatus' | 'paymentApproved' | 'paidAmount' | 'totalAmount'>
+) => {
+  const paidAmount = Math.max(0, order.paidAmount ?? 0);
+  const isApproved = !!order.paymentApproved;
+  const hasCustomerPayment = paidAmount > 0 || order.paymentStatus === 'paid' || order.paymentStatus === 'partial';
+  if (hasCustomerPayment && !isApproved) {
+    return 'Approval Pending';
+  }
+  if (order.paymentStatus === 'paid' || paidAmount >= order.totalAmount) {
+    return 'Paid';
+  }
+  if (order.paymentStatus === 'partial' || (paidAmount > 0 && paidAmount < order.totalAmount)) {
+    return 'Partial';
+  }
+  return 'Unpaid';
+};
 
 export const formatOrderDate = (value?: number) => {
   if (!value) {

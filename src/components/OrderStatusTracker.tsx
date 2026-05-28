@@ -9,7 +9,9 @@ type OrderStatusTrackerProps = {
 };
 
 const OrderStatusTracker = ({ status, compact }: OrderStatusTrackerProps) => {
-  const activeIndex = ORDER_STATUS_STEPS.findIndex((step) => step.id === status);
+  const displaySteps = ORDER_STATUS_STEPS.filter((step) => step.id !== 'preparing');
+  const displayStatus = status === 'preparing' ? 'confirmed' : status;
+  const activeIndex = displaySteps.findIndex((step) => step.id === displayStatus);
 
   if (status === 'cancelled') {
     return (
@@ -20,9 +22,53 @@ const OrderStatusTracker = ({ status, compact }: OrderStatusTrackerProps) => {
     );
   }
 
+  const compactActiveIndex = displaySteps.findIndex((step) => step.id === displayStatus);
+
+  if (compact) {
+    return (
+      <View style={[styles.card, styles.cardCompact]}>
+        <View style={styles.compactRow}>
+          {displaySteps.map((step, index) => {
+            const isActive = index <= compactActiveIndex;
+            const meta = ORDER_STATUS_META[step.id];
+            const title =
+              step.id === 'out_for_delivery'
+                ? 'Out for\nDelivery'
+                : step.shortLabel;
+
+            return (
+              <View key={step.id} style={styles.compactStep}>
+                <View style={styles.compactTrackRow}>
+                  <View
+                    style={[
+                      styles.dot,
+                      styles.compactDot,
+                      {
+                        backgroundColor: isActive ? meta.accent : '#D7E6F1'
+                      }
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.compactTitle, isActive && styles.stepTitleActive]}>
+                  {title}
+                </Text>
+              </View>
+            );
+          })}
+          <View style={styles.compactLineLayer}>
+            {displaySteps.slice(0, -1).map((step, index) => {
+              const isActive = index < compactActiveIndex;
+              return <View key={step.id} style={[styles.compactLine, isActive && styles.lineActive]} />;
+            })}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.card, compact && styles.cardCompact]}>
-      {ORDER_STATUS_STEPS.map((step, index) => {
+    <View style={styles.card}>
+      {displaySteps.map((step, index) => {
         const isActive = index <= activeIndex;
         const meta = ORDER_STATUS_META[step.id];
         return (
@@ -36,19 +82,14 @@ const OrderStatusTracker = ({ status, compact }: OrderStatusTrackerProps) => {
                   }
                 ]}
               />
-              {index < ORDER_STATUS_STEPS.length - 1 ? (
+              {index < displaySteps.length - 1 ? (
                 <View style={[styles.line, isActive && styles.lineActive]} />
               ) : null}
             </View>
             <View style={styles.textColumn}>
               <Text style={[styles.stepTitle, isActive && styles.stepTitleActive]}>
-                {compact ? step.shortLabel : step.label}
+                {step.label}
               </Text>
-              {!compact ? (
-                <Text style={styles.stepSubtitle}>
-                  {isActive ? 'Completed' : 'Waiting for update'}
-                </Text>
-              ) : null}
             </View>
           </View>
         );
@@ -64,7 +105,60 @@ const styles = StyleSheet.create({
     padding: 18
   },
   cardCompact: {
-    paddingVertical: 10
+    paddingTop: 14,
+    paddingBottom: 16,
+    paddingHorizontal: 22
+  },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    position: 'relative'
+  },
+  compactStep: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center'
+  },
+  compactTrackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    zIndex: 2
+  },
+  compactDot: {
+    marginTop: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8
+  },
+  compactLineLayer: {
+    position: 'absolute',
+    top: 7,
+    left: '12.5%',
+    right: '12.5%',
+    flexDirection: 'row',
+    zIndex: 1,
+    pointerEvents: 'none'
+  },
+  compactLine: {
+    flex: 1,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: '#D7E6F1',
+    marginHorizontal: 2
+  },
+  compactTitle: {
+    marginTop: 8,
+    color: '#547185',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 12,
+    minHeight: 28,
+    paddingHorizontal: 1,
+    width: '100%'
   },
   stepRow: {
     flexDirection: 'row'
@@ -91,7 +185,7 @@ const styles = StyleSheet.create({
   },
   textColumn: {
     flex: 1,
-    paddingBottom: 14,
+    paddingBottom: 10,
     paddingLeft: 10
   },
   stepTitle: {
@@ -101,11 +195,6 @@ const styles = StyleSheet.create({
   },
   stepTitleActive: {
     color: '#10324A'
-  },
-  stepSubtitle: {
-    marginTop: 4,
-    color: '#7B95A6',
-    fontSize: 12
   },
   cancelledCard: {
     backgroundColor: '#FEE2E2',

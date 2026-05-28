@@ -1,23 +1,23 @@
 {
   "expo": {
-    "name": "Thanni CAN",
-    "slug": "thanni",
-    "version": "1.0.0",
+    "name": "WaterAppNew",
+    "slug": "waterappnew",
+    "version": "0.1.0",
+    "sdkVersion": "49.0.0",
     "platforms": [
       "ios",
       "android",
       "web"
     ],
-    "sdkVersion": "49.0.0",
-    "orientation": "portrait",
+    "owner": "thisaitechnologies7",
+    "android": {
+      "package": "com.thisaitechnologies.waterappnew",
+      "googleServicesFile": "./android/app/google-services.json"
+    },
     "extra": {
       "eas": {
-        "projectId": "f989ba6d-8429-49e2-a6f3-dad46088fe50"
+        "projectId": "b86b8be2-1ce4-4e94-aaf7-e5a87b1d9637"
       }
-    },
-    "owner": "thisais-organization",
-    "android": {
-      "package": "com.thisaisorganization.thanni"
     }
   }
 }

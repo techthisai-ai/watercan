@@ -8,25 +8,31 @@ import { theme } from '../styles/theme';
 import AppIcon from './AppIcon';
 
 type CustomerBottomNavProps = {
-  active: 'CustomerHome' | 'CustomerOrders' | 'CustomerSubscription' | 'CustomerWallet' | 'Profile';
+  active: 'CustomerHome' | 'CustomerOrders' | 'CustomerPay' | 'CustomerWallet' | 'Profile';
 };
 
 const items = [
   { key: 'CustomerHome', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { key: 'CustomerOrders', label: 'Orders', icon: 'receipt-outline', activeIcon: 'receipt' },
-  { key: 'CustomerSubscription', label: 'Plan', icon: 'calendar-outline', activeIcon: 'calendar' },
-  { key: 'CustomerWallet', label: 'Wallet', icon: 'wallet-outline', activeIcon: 'wallet' }
+  { key: 'CustomerPay', label: 'Pay', icon: 'card-outline', activeIcon: 'card' },
+  { key: 'CustomerWallet', label: 'Bottle', icon: 'wine-outline', activeIcon: 'wine' }
 ] as const;
 
 const CustomerBottomNav = ({ active }: CustomerBottomNavProps) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const handleTabPress = (key: CustomerBottomNavProps['active']) => {
+    if (key === active) {
+      return;
+    }
+    navigation.navigate(key);
+  };
 
   return (
     <View style={styles.container}>
       {items.map((item) => {
         const selected = item.key === active;
         return (
-          <Pressable key={item.key} style={styles.item} onPress={() => navigation.navigate(item.key)}>
+          <Pressable key={item.key} style={styles.item} onPress={() => handleTabPress(item.key)}>
             <View style={[styles.iconWrap, selected && styles.iconWrapSelected]}>
               <AppIcon
                 name={selected ? item.activeIcon : item.icon}

@@ -7,12 +7,13 @@
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "skipLibCheck": true,
+    "skipLibCheck": true,  
     "resolveJsonModule": true,
     "noEmit": true
   },
   "exclude": [
     "node_modules",
+    "water",
     "babel.config.js",
     "metro.config.js",
     "jest.config.js"

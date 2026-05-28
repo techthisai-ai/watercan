@@ -1,17 +1,34 @@
-import React, { createContext, useEffect, useMemo, useState } from 'react';
+import './src/polyfills/url';
+import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import AppNavigator from './src/navigation/AppNavigator';
 import LoadingScreen from './src/screens/LoadingScreen';
-import { onAuthStateChangedListener, getUserProfile, signOutUser } from './src/services/firebaseService';
-import { User as FirebaseUser } from 'firebase/auth';
+import {
+  ensureInitialFirestoreData,
+  onAuthStateChangedListener,
+  getFriendlyFirebaseAuthMessage,
+  getUserProfile,
+  signOutUser
+} from './src/services/firebaseService';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { LanguageProvider } from './src/i18n/LanguageContext';
-
 if (typeof console !== 'undefined') {
   const _warn = console.warn.bind(console);
-  console.warn = (...args: any[]) => {
-    if (typeof args[0] === 'string' && args[0].includes('Cannot record touch end without a touch start')) return;
-    _warn(...args);
+  const _error = console.error.bind(console);
+  const _log = console.log.bind(console);
+  const suppress = (args: any[]) => {
+    const msg = typeof args[0] === 'string' ? args[0] : JSON.stringify(args[0] ?? '');
+    return msg.includes('Cannot record touch end') ||
+      msg.includes('Unexpected text node') ||
+      msg.includes('resource-exhausted') ||
+      msg.includes('RestConnection RPC') ||
+      msg.includes('@firebase/firestore') ||
+      msg.includes('429') ||
+      msg.includes('Too Many Requests');
   };
+  console.warn = (...args: any[]) => { if (!suppress(args)) _warn(...args); };
+  console.error = (...args: any[]) => { if (!suppress(args)) _error(...args); };
+  console.log = (...args: any[]) => { if (!suppress(args)) _log(...args); };
 }
 
 export type UserProfile = {
@@ -50,7 +67,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [initializing, setInitializing] = useState(true);
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (!user) {
       setProfile(null);
       return;
@@ -63,31 +80,15 @@ export default function App() {
       console.error('Failed to refresh profile', error);
       setProfile(null);
     }
-  };
+  }, [user]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     setAuthError('');
     await signOutUser();
-  };
+  }, []);
 
   const getStartupAuthError = (error: unknown) => {
-    const firebaseError = error as { code?: string; message?: string } | null;
-    const message = firebaseError?.message?.toLowerCase() ?? '';
-
-    if (firebaseError?.code === 'profile/forbidden' || firebaseError?.code === 'permission-denied') {
-      return 'Please sign in again.';
-    }
-
-    if (
-      firebaseError?.code === 'unavailable' ||
-      firebaseError?.code === 'failed-precondition' ||
-      message.includes('client is offline') ||
-      message.includes('offline')
-    ) {
-      return 'Connection blocked. Disable browser blocker or extension and try again.';
-    }
-
-    return 'Please sign in again.';
+    return getFriendlyFirebaseAuthMessage(error, 'profile');
   };
 
   useEffect(() => {
@@ -101,6 +102,7 @@ export default function App() {
       }
 
       try {
+        await ensureInitialFirestoreData().catch(() => {});
         const profileData = await getUserProfile(authUser.uid);
         setProfile(profileData);
         setAuthError('');
@@ -119,7 +121,7 @@ export default function App() {
 
   const authContextValue = useMemo(
     () => ({ user, profile, authError, initializing, refreshProfile, setProfile, signOut }),
-    [user, profile, authError, initializing]
+    [user, profile, authError, initializing, refreshProfile, signOut]
   );
 
   if (initializing) {

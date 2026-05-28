@@ -13,9 +13,9 @@ import {
 } from 'react-native';
 import { AuthContext } from '../../App';
 import OrderStatusTracker from '../components/OrderStatusTracker';
-import { formatCurrency, ORDER_STATUS_META } from '../data/orderModule';
+import { formatCurrency, formatQuantityLabel, getCustomerPaymentStatusLabel, ORDER_STATUS_META } from '../data/orderModule';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { fetchCustomerOrders, OrderRecord, subscribeToOrder } from '../services/firebaseService';
+import { OrderRecord, subscribeToCustomerOrders, subscribeToOrder } from '../services/firebaseService';
 import { useLang } from '../i18n/LanguageContext';
 
 type RouteProps = RouteProp<RootStackParamList, 'OrderTracking'>;
@@ -44,12 +44,13 @@ const OrderTrackingScreen = () => {
         return;
       }
       if (!profile?.uid) { setLoading(false); return; }
-      const orders = await fetchCustomerOrders(profile.uid).catch(() => []);
-      const active_ = orders.find((o) => o.status !== 'delivered' && o.status !== 'cancelled') ?? orders[0] ?? null;
-      if (active) { setOrder(active_); setLoading(false); }
-      if (active_?.id) {
-        unsubscribe = subscribeToOrder(active_.id, (next) => { if (active) setOrder(next); });
-      }
+      unsubscribe = subscribeToCustomerOrders(profile.uid, (orders) => {
+        const activeOrder = orders.find((o) => o.status !== 'delivered' && o.status !== 'cancelled') ?? orders[0] ?? null;
+        if (active) {
+          setOrder(activeOrder);
+          setLoading(false);
+        }
+      });
     };
 
     load();
@@ -79,7 +80,18 @@ const OrderTrackingScreen = () => {
   }
 
   const statusMeta = ORDER_STATUS_META[order.status];
+  const deliveredCans = Math.max(
+    0,
+    Math.min(order.quantity, order.deliveredQuantity ?? (order.status === 'delivered' ? order.quantity : 0))
+  );
+  const pendingCans = Math.max(0, Math.min(order.quantity, order.pendingQuantity ?? (order.quantity - deliveredCans)));
+  const statusLabel =
+    order.status === 'out_for_delivery' && deliveredCans > 0 && pendingCans > 0
+      ? 'Partial'
+      : statusMeta.label;
   const contactPhone = order.phone || OWNER_PHONE;
+  const quantityLabel = formatQuantityLabel(order);
+  const paymentLabel = getCustomerPaymentStatusLabel(order);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -91,7 +103,7 @@ const OrderTrackingScreen = () => {
             <Text style={styles.backBtnText}>{t.back}</Text>
           </Pressable>
           <View style={[styles.statusBadge, { backgroundColor: statusMeta.background }]}>
-            <Text style={[styles.statusBadgeText, { color: statusMeta.text }]}>{statusMeta.label}</Text>
+            <Text style={[styles.statusBadgeText, { color: statusMeta.text }]}>{statusLabel}</Text>
           </View>
         </View>
 
@@ -99,7 +111,7 @@ const OrderTrackingScreen = () => {
         <View style={styles.heroCard}>
           <View style={styles.heroRow}>
             <View style={styles.heroChip}>
-              <Text style={styles.heroChipText}>{order.quantity} {t.cans}</Text>
+              <Text style={styles.heroChipText}>{quantityLabel}</Text>
             </View>
             <View style={styles.heroChip}>
               <Text style={styles.heroChipText}>{formatCurrency(order.totalAmount)}</Text>
@@ -125,7 +137,7 @@ const OrderTrackingScreen = () => {
             </View>
             <View style={styles.productInfo}>
               <Text style={styles.productName}>{order.productName}</Text>
-              <Text style={styles.productMeta}>{order.quantity} cans × {formatCurrency(order.pricePerCan)}</Text>
+              <Text style={styles.productMeta}>{quantityLabel} × {formatCurrency(order.pricePerCan)}</Text>
               <Text style={order.deliveryCharge > 0 ? styles.productMeta : styles.productMetaGreen}>
                 {order.deliveryCharge > 0 ? t.deliveryCharge.replace('{amt}', formatCurrency(order.deliveryCharge)) : t.freeDelivery}
               </Text>
@@ -141,7 +153,13 @@ const OrderTrackingScreen = () => {
             <Text style={styles.infoLabel}>{t.paymentStatus}</Text>
             <View style={styles.payBadge}>
               <Text style={styles.payBadgeText}>
-                {order.paymentStatus === 'paid' ? t.paid : t.payOnDelivery}
+                {paymentLabel === 'Approval Pending'
+                  ? 'Approval Pending'
+                  : paymentLabel === 'Paid'
+                    ? t.paid
+                    : paymentLabel === 'Partial'
+                      ? t.partPaid
+                      : t.payOnDelivery}
               </Text>
             </View>
           </View>
@@ -176,10 +194,6 @@ const OrderTrackingScreen = () => {
             </Pressable>
           </View>
         </View>
-
-        <Pressable style={styles.detailsBtn} onPress={() => navigation.navigate('OrderDetails', { orderId: order.id! })}>
-          <Text style={styles.detailsBtnText}>{t.viewFullDetails}</Text>
-        </Pressable>
 
       </ScrollView>
     </SafeAreaView>
@@ -228,8 +242,6 @@ const styles = StyleSheet.create({
   waBtn: { flex: 1, backgroundColor: '#E8F7EE', borderRadius: 18, paddingVertical: 14, alignItems: 'center', gap: 4 },
   waBtnText: { color: '#1E7A45', fontSize: 13, fontWeight: '800' },
   contactIcon: { fontSize: 18 },
-  detailsBtn: { backgroundColor: '#fff', borderRadius: 18, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: '#D6E6DC' },
-  detailsBtnText: { color: '#1E7A45', fontSize: 15, fontWeight: '800' },
   primaryBtn: { backgroundColor: '#1E7A45', borderRadius: 18, paddingVertical: 15, alignItems: 'center', marginTop: 16 },
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   emptyCard: { margin: 18, backgroundColor: '#fff', borderRadius: 24, padding: 24, alignItems: 'center' },
@@ -238,3 +250,4 @@ const styles = StyleSheet.create({
 });
 
 export default OrderTrackingScreen;
+

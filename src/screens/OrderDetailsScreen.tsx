@@ -18,12 +18,15 @@ import {
   canCancelOrder,
   canModifyOrder,
   formatCurrency,
+  getCustomerPaymentStatusLabel,
+  getOrderProductType,
   formatOrderDate,
   formatOrderNumber,
+  formatQuantityLabel,
   ORDER_STATUS_META
 } from '../data/orderModule';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { cancelOrder, getOrderById, OrderRecord, OrderStatus, updateOrderStatus } from '../services/firebaseService';
+import { cancelOrder, getFriendlyOrderMessage, getOrderById, OrderRecord, OrderStatus, updateOrderStatus } from '../services/firebaseService';
 import { useLang } from '../i18n/LanguageContext';
 
 type RouteProps = RouteProp<RootStackParamList, 'OrderDetails'>;
@@ -81,6 +84,8 @@ const OrderDetailsScreen = () => {
 
   const isOwner = profile?.role === 'owner';
   const statusMeta = ORDER_STATUS_META[order.status];
+  const productType = getOrderProductType(order);
+  const productTypeLabel = `${productType}${order.quantity !== 1 ? 's' : ''}`;
   const currentIndex = ownerFlow.indexOf(order.status);
   const nextStatus = currentIndex >= 0 && currentIndex < ownerFlow.length - 1 ? ownerFlow[currentIndex + 1] : null;
 
@@ -101,8 +106,19 @@ const OrderDetailsScreen = () => {
       {
         text: t.yesCancel, style: 'destructive',
         onPress: async () => {
-          await cancelOrder(order.id!);
-          setOrder({ ...order, status: 'cancelled' });
+          if (saving) {
+            return;
+          }
+
+          setSaving(true);
+          try {
+            await cancelOrder(order.id!);
+            setOrder({ ...order, status: 'cancelled' });
+          } catch (cancelError) {
+            Alert.alert(t.orderFailed, getFriendlyOrderMessage(cancelError));
+          } finally {
+            setSaving(false);
+          }
         }
       }
     ]);
@@ -132,7 +148,7 @@ const OrderDetailsScreen = () => {
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
               <Text style={styles.heroStatVal}>{order.quantity}</Text>
-              <Text style={styles.heroStatLbl}>{t.cans}</Text>
+              <Text style={styles.heroStatLbl}>{productTypeLabel}</Text>
             </View>
             <View style={styles.heroStatDivider} />
             <View style={styles.heroStat}>
@@ -162,7 +178,7 @@ const OrderDetailsScreen = () => {
             </View>
             <View style={styles.productInfo}>
               <Text style={styles.productName}>{order.productName}</Text>
-              <Text style={styles.productMeta}>{order.quantity} cans × {formatCurrency(order.pricePerCan)}</Text>
+              <Text style={styles.productMeta}>{formatQuantityLabel(order)} × {formatCurrency(order.pricePerCan)}</Text>
               {order.deliveryCharge > 0 ? (
                 <Text style={styles.productMeta}>{t.deliveryCharge.replace('{amt}', formatCurrency(order.deliveryCharge))}</Text>
               ) : (
@@ -180,7 +196,13 @@ const OrderDetailsScreen = () => {
             <Text style={styles.infoLabel}>{t.paymentStatusLabel}</Text>
             <View style={styles.payBadge}>
               <Text style={styles.payBadgeText}>
-                {order.paymentStatus === 'paid' ? t.paid : order.paymentStatus === 'partial' ? t.partPaid : t.payOnDelivery}
+                {getCustomerPaymentStatusLabel(order) === 'Approval Pending'
+                  ? 'Approval Pending'
+                  : getCustomerPaymentStatusLabel(order) === 'Paid'
+                    ? t.paid
+                    : getCustomerPaymentStatusLabel(order) === 'Partial'
+                      ? t.partPaid
+                      : t.payOnDelivery}
               </Text>
             </View>
           </View>
@@ -246,7 +268,10 @@ const OrderDetailsScreen = () => {
               <Text style={styles.primaryBtnText}>{t.trackThisOrder}</Text>
             </Pressable>
             {canModifyOrder(order.status) ? (
-              <Pressable style={styles.secondaryBtn} onPress={() => navigation.navigate('NewOrder', { orderId: order.id })}>
+              <Pressable
+                style={styles.secondaryBtn}
+                onPress={() => navigation.navigate('CustomerHome', { editOrderId: order.id })}
+              >
                 <Text style={styles.secondaryBtnText}>{t.modifyOrder}</Text>
               </Pressable>
             ) : null}

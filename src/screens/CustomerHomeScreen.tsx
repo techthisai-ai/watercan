@@ -1,52 +1,170 @@
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useCallback, useContext, useState } from 'react';
-import { Alert, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, ImageBackground, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AuthContext } from '../../App';
 import AppIcon from '../components/AppIcon';
 import CustomerBottomNav from '../components/CustomerBottomNav';
-import { formatCurrency, WATER_PRODUCT } from '../data/orderModule';
-import { RootStackParamList } from '../navigation/AppNavigator';
-import { createOrder, fetchCustomerOrders, fetchInventorySummary, OrderRecord, autoProgressOrders } from '../services/firebaseService';
+import NotificationBell from '../components/NotificationBell';
+import OrderStatusTracker from '../components/OrderStatusTracker';
+import { formatCurrency, formatOrderNumber, formatOrderReference, getCustomerPaymentStatusLabel, WATER_PRODUCT } from '../data/orderModule';
 import { useLang } from '../i18n/LanguageContext';
+import { RootStackParamList } from '../navigation/AppNavigator';
+import {
+  createOrder,
+  subscribeToInventoryStock,
+  getFriendlyOrderMessage,
+  OrderRecord,
+  subscribeToCustomerOrders
+} from '../services/firebaseService';
 import waterCanImage from '../assets/20-l-water-can1.jpg';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'CustomerHome'>;
+type CustomerHomeRouteProp = RouteProp<RootStackParamList, 'CustomerHome'>;
+type OrderModalMode = 'repeat' | null;
+const isSameOrderFeed = (prev: OrderRecord[], next: OrderRecord[]) =>
+  prev.length === next.length &&
+  prev.every((order, index) => {
+    const candidate = next[index];
+    return (
+      order.id === candidate?.id &&
+      order.orderNumber === candidate?.orderNumber &&
+      order.status === candidate?.status &&
+      order.updatedAt === candidate?.updatedAt &&
+      order.deliveredQuantity === candidate?.deliveredQuantity &&
+      order.pendingQuantity === candidate?.pendingQuantity &&
+      order.paymentStatus === candidate?.paymentStatus &&
+      order.paidAmount === candidate?.paidAmount &&
+      !!order.paymentApproved === !!candidate?.paymentApproved
+    );
+  });
 
 const CustomerHomeScreen = () => {
   const { profile } = useContext(AuthContext);
   const { t } = useLang();
   const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<CustomerHomeRouteProp>();
   const [orders, setOrders] = useState<OrderRecord[]>([]);
-  const [liveStock, setLiveStock] = useState(WATER_PRODUCT.availableStock);
+  const [liveStock, setLiveStock] = useState(0);
+  const [totalOrders, setTotalOrders] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [ordering, setOrdering] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState<{ orderId: string; orderNumber?: number } | null>(null);
+  const [orderSuccess, setOrderSuccess] = useState<{ orderNumber?: number } | null>(null);
+  const [orderModalMode, setOrderModalMode] = useState<OrderModalMode>(null);
+  const orderSubmitInFlight = useRef(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      const load = async () => {
-        if (!profile?.uid) { setOrders([]); return; }
-        await autoProgressOrders(profile.uid).catch(() => {});
-        const [data, inv] = await Promise.all([
-          fetchCustomerOrders(profile.uid).catch(() => []),
-          fetchInventorySummary().catch(() => null)
-        ]);
-        if (!active) return;
-        setOrders(data);
-        if (inv) setLiveStock(Math.max(0, (inv.openingStock ?? 0) + (inv.restockedCans ?? 0) - (inv.soldCans ?? 0)));
-      };
-      load();
-      return () => { active = false; };
-    }, [profile?.uid])
-  );
+  useEffect(() => {
+    // Subscribe to inventory stock in real time.
+    const unsubscribeStock = subscribeToInventoryStock((stock) => {
+      setLiveStock(stock);
+    });
+    return unsubscribeStock;
+  }, []);
 
-  const handleQuickOrder = async () => {
-    if (!profile) return;
+  useEffect(() => {
+    if (!profile?.uid) {
+      setOrders([]);
+      return;
+    }
+    let active = true;
+    const unsubscribeOrders = subscribeToCustomerOrders(profile.uid, (data) => {
+      if (active) {
+        setOrders((current) => (isSameOrderFeed(current, data) ? current : data));
+        setTotalOrders(data.filter((order) => order.status !== 'cancelled').length);
+      }
+    });
+    return () => {
+      active = false;
+      unsubscribeOrders?.();
+    };
+  }, [profile?.uid]);
+
+  useEffect(() => {
+    const reorderOrderId = route.params?.reorderOrderId;
+    if (!reorderOrderId) {
+      return;
+    }
+    navigation.navigate('NewOrder', { orderId: reorderOrderId });
+    navigation.setParams({ reorderOrderId: undefined });
+  }, [navigation, route.params?.reorderOrderId]);
+
+  useEffect(() => {
+    const editOrderId = route.params?.editOrderId;
+    if (!editOrderId) {
+      return;
+    }
+    navigation.navigate('NewOrder', { orderId: editOrderId });
+    navigation.setParams({ editOrderId: undefined });
+  }, [navigation, route.params?.editOrderId]);
+
+  const countedOrders = useMemo(() => orders.filter((order) => order.status !== 'cancelled'), [orders]);
+  const activeOrders = useMemo(() => countedOrders.filter((order) => order.status !== 'delivered'), [countedOrders]);
+  const activeOrder = activeOrders[0] ?? null;
+  const activeOrderDelivered = activeOrder
+    ? Math.max(
+        0,
+        Math.min(activeOrder.quantity, activeOrder.deliveredQuantity ?? (activeOrder.status === 'delivered' ? activeOrder.quantity : 0))
+      )
+    : 0;
+  const activeOrderPending = activeOrder
+    ? Math.max(0, Math.min(activeOrder.quantity, activeOrder.pendingQuantity ?? (activeOrder.quantity - activeOrderDelivered)))
+    : 0;
+  const activeOrderStatusLabel =
+    activeOrder && activeOrder.status === 'out_for_delivery' && activeOrderDelivered > 0 && activeOrderPending > 0
+      ? 'Partial'
+      : null;
+  const activeOrderPaymentLabel = activeOrder ? getCustomerPaymentStatusLabel(activeOrder) : 'Unpaid';
+
+  useEffect(() => {
+    const latestOrder = orders[0];
+    if (!latestOrder) {
+      setQuantity((current) => (current < 1 ? 1 : current));
+      return;
+    }
+
+    const nextQuantity = Math.max(1, Math.min(liveStock, latestOrder.quantity));
+    setQuantity((current) => (current === nextQuantity ? current : nextQuantity));
+  }, [orders, liveStock]);
+
+  const validateOrder = (stock = liveStock, shouldNavigateToProfile = true) => {
+    if (!profile) {
+      Alert.alert(t.orderFailed, 'Please sign in again.');
+      return false;
+    }
+    if (profile.role !== 'customer') {
+      Alert.alert(t.orderFailed, 'Only customer accounts can place new orders.');
+      return false;
+    }
+    if (!profile.address?.trim()) {
+      Alert.alert(t.orderFailed, 'Please add your delivery address in Profile before placing an order.');
+      if (shouldNavigateToProfile) {
+        navigation.navigate('Profile');
+      }
+      return false;
+    }
+    if (stock <= 0) {
+      Alert.alert(t.orderFailed, 'Water cans are currently out of stock.');
+      return false;
+    }
+    if (quantity > stock) {
+      Alert.alert(t.orderFailed, `Only ${stock} cans are available right now.`);
+      return false;
+    }
+    return true;
+  };
+
+  const submitOrder = async () => {
+    if (ordering || orderSubmitInFlight.current) {
+      return;
+    }
+
+    if (!validateOrder(liveStock, false) || !profile) {
+      return;
+    }
+
+    orderSubmitInFlight.current = true;
     setOrdering(true);
     try {
-      const deliveryCharge = 0;
       const totalAmount = quantity * WATER_PRODUCT.pricePerCan;
       const result = await createOrder({
         customerId: profile.uid,
@@ -54,9 +172,11 @@ const CustomerHomeScreen = () => {
         phone: profile.phone,
         address: profile.address?.trim() || '',
         productName: WATER_PRODUCT.name,
+        orderType: 'single',
+        packName: '',
         quantity,
         pricePerCan: WATER_PRODUCT.pricePerCan,
-        deliveryCharge,
+        deliveryCharge: 0,
         totalAmount,
         availableStock: liveStock,
         note: '',
@@ -67,372 +187,650 @@ const CustomerHomeScreen = () => {
         expectedDeliveryTime: '7:00 AM - 10:00 AM',
         subscription: false
       });
-      setOrders((prev) => [result as any, ...prev]);
-      setOrderSuccess({ orderId: result.id!, orderNumber: result.orderNumber });
+      setOrders((current) => {
+        const nextOrder = result as OrderRecord;
+        return current.some((order) => order.id === nextOrder.id)
+          ? current
+          : [nextOrder, ...current];
+      });
+      setLiveStock((current) => Math.max(0, current - quantity));
+      setOrderSuccess({ orderNumber: result.orderNumber });
+      setOrderModalMode(null);
+      setTimeout(() => setOrderSuccess(null), 3500);
     } catch (e: any) {
-      Alert.alert(t.orderFailed, e.message || t.couldNotPlace);
+      Alert.alert(t.orderFailed, getFriendlyOrderMessage(e));
     } finally {
+      orderSubmitInFlight.current = false;
       setOrdering(false);
     }
   };
 
+  const handleOrder = async () => {
+    if (!validateOrder()) {
+      return;
+    }
+    if (activeOrder) {
+      setOrderModalMode('repeat');
+      return;
+    }
+
+    submitOrder();
+  };
+
+  const handleOrderAgain = async () => {
+    submitOrder();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
+      <Modal
+        visible={orderModalMode !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOrderModalMode(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {orderModalMode === 'repeat' ? (
+              <>
+                <Text style={styles.modalTitle}>You have already placed an order. Do you want to place again?</Text>
+                <View style={styles.modalActions}>
+                  <Pressable style={styles.modalSecondaryButton} onPress={() => setOrderModalMode(null)}>
+                    <Text style={styles.modalSecondaryButtonText}>Close</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.modalPrimaryButton, ordering && styles.disabledButton]}
+                    onPress={handleOrderAgain}
+                    disabled={ordering}
+                  >
+                    <Text style={styles.modalPrimaryButtonText}>{ordering ? t.placingOrder : 'Order Again'}</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* Top bar */}
-        <View style={styles.topBar}>
+        <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>{t.hello}, {profile?.name?.split(' ')[0] || t.customer} 👋</Text>
-            <Text style={styles.shopName}>{t.appName}</Text>
+            <Text style={styles.greeting}>{t.hello}, {profile?.name?.split(' ')[0] || t.customer}</Text>
+            <Text style={styles.appName}>{t.appName}</Text>
           </View>
-          <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('Profile')}>
-            <AppIcon name="person" size={20} color="#1E7A45" />
-          </Pressable>
-        </View>
-
-        {/* Hero image */}
-        <View style={styles.heroCard}>
-          <Image source={waterCanImage} style={styles.heroImage} resizeMode="cover" />
-          <View style={styles.heroOverlay}>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>{t.freshPureFast}</Text>
-            </View>
-            <Text style={styles.heroTitle}>{t.waterCanTitle}</Text>
+          <View style={styles.headerActions}>
+            <NotificationBell />
+            <Pressable style={styles.profileButton} onPress={() => navigation.navigate('Profile')}>
+              <AppIcon name="person" size={20} color="#0F6CBD" />
+            </Pressable>
           </View>
         </View>
 
-        {/* Order card */}
-        <View style={styles.orderCard}>
-          <View style={styles.orderCardHeader}>
-            <Image source={waterCanImage} style={styles.orderCardImage} resizeMode="cover" />
-            <View style={styles.orderCardInfo}>
-              <Text style={styles.orderCardTitle}>20L Water Can</Text>
-              <Text style={styles.orderCardPrice}>{formatCurrency(WATER_PRODUCT.pricePerCan)} {t.perCan}</Text>
+        {orderSuccess ? (
+          <View style={styles.successBanner}>
+            <AppIcon name="checkmark-circle" size={20} color="#1E7A45" />
+            <View style={styles.successCopy}>
+              <Text style={styles.successTitle}>Order Successful</Text>
+              <Text style={styles.successText}>
+                {orderSuccess.orderNumber ? `Order ${formatOrderNumber(orderSuccess)} is now being tracked below.` : 'Your order is now being tracked below.'}
+              </Text>
             </View>
+            <Pressable style={styles.successClose} onPress={() => setOrderSuccess(null)}>
+              <Text style={styles.successCloseText}>×</Text>
+            </Pressable>
           </View>
+        ) : null}
 
-          {orderSuccess && (
-            <View style={styles.successBanner}>
-              <AppIcon name="checkmark-circle" size={20} color="#1E7A45" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.successBannerTitle}>{t.orderPlaced.replace('{n}', String(orderSuccess.orderNumber))}</Text>
-                <Text style={styles.successBannerSub}>{t.deliverSoon}</Text>
+        {/* Horizontal tracking bar */}
+        {activeOrder ? (
+          <View style={styles.trackBar}>
+            <View style={styles.trackHeader}>
+              <Text style={styles.trackLabelText}>
+                {activeOrderStatusLabel ? `${activeOrderStatusLabel} • ` : ''}Tracking {formatOrderReference(activeOrder)}
+              </Text>
+              <View style={[styles.paymentStatusPill, activeOrderPaymentLabel === 'Paid' ? styles.paymentStatusPaid : styles.paymentStatusPending]}>
+                <Text style={[styles.paymentStatusText, activeOrderPaymentLabel === 'Paid' ? styles.paymentStatusTextPaid : styles.paymentStatusTextPending]}>
+                  Payment: {activeOrderPaymentLabel === 'Approval Pending' ? 'Approval Pending' : activeOrderPaymentLabel}
+                </Text>
               </View>
-              <Pressable onPress={() => setOrderSuccess(null)}>
-                <AppIcon name="close" size={18} color="#6A90B0" />
-              </Pressable>
             </View>
-          )}
-          <View style={styles.qtyRow}>
-            <Text style={styles.qtyLabel}>{t.quantity}</Text>
-            <View style={styles.qtyControls}>
-              <Pressable style={styles.qtyBtn} onPress={() => setQuantity(q => Math.max(1, q - 1))}>
-                <Text style={styles.qtyBtnText}>−</Text>
-              </Pressable>
-              <Text style={styles.qtyValue}>{quantity}</Text>
-              <Pressable style={styles.qtyBtn} onPress={() => setQuantity(q => Math.min(liveStock, q + 1))}>
-                <Text style={styles.qtyBtnText}>+</Text>
-              </Pressable>
-            </View>
+            <OrderStatusTracker status={activeOrder.status} compact />
           </View>
-          <View style={styles.orderSummaryRow}>
-            <Text style={styles.orderSummaryLabel}>{t.total}</Text>
-            <Text style={styles.orderSummaryValue}>{formatCurrency(quantity * WATER_PRODUCT.pricePerCan)}</Text>
-          </View>
-          <Pressable style={[styles.orderBtn, ordering && styles.orderBtnDisabled]} onPress={handleQuickOrder} disabled={ordering}>
-            <AppIcon name="flash" size={20} color="#fff" />
-            <Text style={styles.orderBtnText}>{ordering ? t.placingOrder : t.orderCansNow.replace('{n}', String(quantity)).replace('{s}', quantity > 1 ? 's' : '')}</Text>
-          </Pressable>
-        </View>
-
-        {/* Product details card */}
-        <View style={styles.productCard}>
-          <View style={styles.productRow}>
-            <View style={styles.productInfo}>
-              <Text style={styles.productName}>{WATER_PRODUCT.name}</Text>
-              <Text style={styles.productSubtitle}>{WATER_PRODUCT.subtitle}</Text>
-            </View>
-            <View style={styles.priceBox}>
-              <Text style={styles.priceValue}>{formatCurrency(WATER_PRODUCT.pricePerCan)}</Text>
-              <Text style={styles.priceLabel}>per can</Text>
-            </View>
-          </View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statBox}>
-              <AppIcon name="cube-outline" size={16} color="#1A7FD4" />
-              <Text style={styles.statValue}>{liveStock}</Text>
-              <Text style={styles.statLabel}>{t.inStock}</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <AppIcon name="time-outline" size={16} color="#1A7FD4" />
-              <Text style={styles.statValue}>30 min</Text>
-              <Text style={styles.statLabel}>{t.express}</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <AppIcon name="receipt-outline" size={16} color="#1A7FD4" />
-              <Text style={styles.statValue}>{orders.length}</Text>
-              <Text style={styles.statLabel}>{t.myOrders}</Text>
-            </View>
-          </View>
-
-          {liveStock <= WATER_PRODUCT.lowStockThreshold ? (
-            <View style={styles.lowStockBanner}>
-              <AppIcon name="warning-outline" size={14} color="#B45309" />
-              <Text style={styles.lowStockText}>{t.lowStock.replace('{n}', String(liveStock))}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Recent orders */}
-        {orders.length > 0 && (
-          <View style={styles.recentBox}>
-            <View style={styles.recentHeader}>
-              <Text style={styles.recentTitle}>{t.recentOrders}</Text>
-              <Pressable onPress={() => navigation.navigate('CustomerOrders')}>
-                <Text style={styles.recentSeeAll}>{t.seeAll}</Text>
-              </Pressable>
-            </View>
-            {orders.slice(0, 3).map(order => (
-              <View key={order.id} style={styles.recentItem}>
-                <View style={[styles.recentDot, { backgroundColor: order.status === 'delivered' ? '#1E7A45' : order.status === 'cancelled' ? '#DC2626' : '#1A7FD4' }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.recentOrderNum}>Order #{order.orderNumber} · {order.quantity} can{order.quantity > 1 ? 's' : ''}</Text>
-                  <Text style={styles.recentOrderStatus}>{order.status.replace('_', ' ')}</Text>
-                </View>
-                <Text style={styles.recentOrderAmt}>{formatCurrency(order.totalAmount)}</Text>
-              </View>
-            ))}
+        ) : (
+          <View style={styles.noOrderBar}>
+            <AppIcon name="water-outline" size={18} color="#7B93AA" />
+            <Text style={styles.noOrderText}>No water can order placed</Text>
           </View>
         )}
 
-        {/* Quick command box */}
-        <View style={styles.commandBox}>
-          <Text style={styles.commandTitle}>{t.quickActions}</Text>
-          <View style={styles.commandGrid}>
-            <Pressable style={styles.commandItem} onPress={() => navigation.navigate('CustomerOrders')}>
-              <View style={styles.commandIcon}>
-                <AppIcon name="receipt-outline" size={22} color="#1A7FD4" />
+        <View style={styles.productDetailsBox}>
+          <View style={styles.productDetailsHeader}>
+            <Text style={styles.productDetailsTitle}>Product details</Text>
+            <Text style={styles.productPrice}>{formatCurrency(WATER_PRODUCT.pricePerCan)}</Text>
+          </View>
+          <View style={styles.productStatsRow}>
+            <View style={styles.productStat}>
+              <AppIcon name="cube-outline" size={16} color="#0F6CBD" />
+              <View>
+                <Text style={styles.productStatLabel}>Stock</Text>
+                <Text style={styles.productStatValue}>{liveStock} cans</Text>
               </View>
-              <Text style={styles.commandLabel}>{t.myOrders}</Text>
-            </Pressable>
-            <Pressable style={styles.commandItem} onPress={() => navigation.navigate('OrderTracking', {})}>
-              <View style={styles.commandIcon}>
-                <AppIcon name="navigate-outline" size={22} color="#1A7FD4" />
+            </View>
+            <View style={styles.productStat}>
+              <AppIcon name="receipt-outline" size={16} color="#0F6CBD" />
+              <View>
+                <Text style={styles.productStatLabel}>Orders</Text>
+                <Text style={styles.productStatValue}>{totalOrders}</Text>
               </View>
-              <Text style={styles.commandLabel}>{t.track}</Text>
-            </Pressable>
-            <Pressable style={styles.commandItem} onPress={() => navigation.navigate('CustomerWallet')}>
-              <View style={styles.commandIcon}>
-                <AppIcon name="wallet-outline" size={22} color="#1A7FD4" />
-              </View>
-              <Text style={styles.commandLabel}>{t.wallet}</Text>
-            </Pressable>
-            <Pressable style={styles.commandItem} onPress={() => navigation.navigate('CustomerSubscription')}>
-              <View style={styles.commandIcon}>
-                <AppIcon name="calendar-outline" size={22} color="#1A7FD4" />
-              </View>
-              <Text style={styles.commandLabel}>{t.plan}</Text>
-            </Pressable>
-            <Pressable style={styles.commandItem} onPress={() => navigation.navigate('Profile')}>
-              <View style={styles.commandIcon}>
-                <AppIcon name="person-outline" size={22} color="#1A7FD4" />
-              </View>
-              <Text style={styles.commandLabel}>{t.profile}</Text>
-            </Pressable>
+            </View>
           </View>
         </View>
 
+        <ImageBackground source={waterCanImage} resizeMode="contain" imageStyle={styles.bgCanImage} style={styles.heroCard}>
+          <View style={styles.bgWash} />
+          <View style={styles.heroQuantityOverlay}>
+            <Pressable
+              style={[styles.stepperButton, ordering && styles.disabledButton]}
+              onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+              disabled={ordering}
+            >
+              <Text style={styles.stepperText}>-</Text>
+            </Pressable>
+            <View style={styles.quantityValueWrap}>
+              <Text style={styles.quantityValue}>{quantity}</Text>
+              <Text style={styles.quantityHint}>cans</Text>
+            </View>
+            <Pressable
+              style={[styles.stepperButton, ordering && styles.disabledButton]}
+              onPress={() => setQuantity((q) => Math.min(liveStock, q + 1))}
+              disabled={ordering}
+            >
+              <Text style={styles.stepperText}>+</Text>
+            </Pressable>
+          </View>
+        </ImageBackground>
+
+        <View style={[styles.card, styles.orderCard]}>
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalValue}>{formatCurrency(quantity * WATER_PRODUCT.pricePerCan)}</Text>
+          </View>
+          <Pressable style={[styles.orderButton, ordering && styles.disabledButton]} onPress={handleOrder} disabled={ordering}>
+            <Text style={styles.orderButtonText}>
+              {ordering ? t.placingOrder : `Order ${quantity} Can${quantity > 1 ? 's' : ''}`}
+            </Text>
+          </Pressable>
+        </View>
       </ScrollView>
+
       <CustomerBottomNav active="CustomerHome" />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#EEF6FF' },
-  content: { paddingBottom: 120 },
-
-  topBar: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12
+  container: {
+    flex: 1,
+    backgroundColor: '#F4F8FC'
   },
-  greeting: { color: '#3A6080', fontSize: 13, fontWeight: '600' },
-  shopName: { color: '#0A2540', fontSize: 22, fontWeight: '900', marginTop: 2 },
-  profileBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#D6EEFF', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#A8C8E8'
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 120
   },
-
-  heroCard: { marginHorizontal: 18, borderRadius: 28, overflow: 'hidden', height: 220 },
-  heroImage: { width: '100%', height: '100%' },
-  heroOverlay: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: 18, backgroundColor: 'rgba(0,30,60,0.38)'
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16
   },
-  heroBadge: {
-    alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 8
+  greeting: {
+    color: '#56708A',
+    fontSize: 13,
+    fontWeight: '600'
   },
-  heroBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  heroTitle: { color: '#fff', fontSize: 26, fontWeight: '900', lineHeight: 32 },
-
-  productCard: {
-    marginHorizontal: 18, marginTop: 14,
-    backgroundColor: '#fff', borderRadius: 24, padding: 18,
-    borderWidth: 1, borderColor: '#C8DFF5'
+  appName: {
+    color: '#12314D',
+    fontSize: 28,
+    fontWeight: '900',
+    marginTop: 2
   },
-  productRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  productInfo: { flex: 1 },
-  productName: { color: '#0A2540', fontSize: 17, fontWeight: '900' },
-  productSubtitle: { color: '#3A6080', fontSize: 13, marginTop: 4 },
-  priceBox: { alignItems: 'flex-end' },
-  priceValue: { color: '#1A7FD4', fontSize: 22, fontWeight: '900' },
-  priceLabel: { color: '#6A90B0', fontSize: 12, marginTop: 2 },
-
-  statsRow: {
-    flexDirection: 'row', marginTop: 16,
-    backgroundColor: '#EAF4FF', borderRadius: 18, padding: 14
+  profileButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#C9DFF2',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
-  statBox: { flex: 1, alignItems: 'center', gap: 4 },
-  statValue: { color: '#0A2540', fontSize: 15, fontWeight: '900' },
-  statLabel: { color: '#6A90B0', fontSize: 11 },
-  statDivider: { width: 1, backgroundColor: '#A8C8E8' },
-
-  lowStockBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginTop: 12, backgroundColor: '#FEF3C7', borderRadius: 12,
-    paddingHorizontal: 12, paddingVertical: 8
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
   },
-  lowStockText: { color: '#B45309', fontSize: 12, fontWeight: '700' },
-
-  orderCard: {
-    marginHorizontal: 18, marginTop: 16,
-    backgroundColor: '#fff', borderRadius: 24, padding: 18,
-    borderWidth: 1, borderColor: '#C8DFF5'
+  heroCard: {
+    height: 220,
+    borderRadius: 28,
+    overflow: 'hidden',
+    marginBottom: 0,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center'
   },
-  orderCardHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14
+  bgCanImage: {
+    width: '100%',
+    height: '100%'
   },
-  orderCardImage: {
-    width: 56, height: 56, borderRadius: 14
+  bgWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.15)'
   },
-  orderCardInfo: { flex: 1 },
-  orderCardTitle: { color: '#0A2540', fontSize: 16, fontWeight: '900' },
-  orderCardPrice: { color: '#1A7FD4', fontSize: 13, fontWeight: '700', marginTop: 3 },
+  heroQuantityOverlay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '85%',
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 12
+  },
+  heroProductName: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '900'
+  },
+  heroPriceText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    backgroundColor: 'rgba(15,108,189,0.85)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7
+  },
+  statusPillText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800'
+  },
   successBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#E7F7EA', borderRadius: 16, padding: 14, marginBottom: 14
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#E8F7EE',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#BDE8CA',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12
   },
-  successBannerTitle: { color: '#1E7A45', fontSize: 14, fontWeight: '900' },
-  successBannerSub: { color: '#3A6080', fontSize: 12, marginTop: 2 },
-  qtyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  qtyLabel: { color: '#3A6080', fontSize: 15, fontWeight: '700' },
-  qtyControls: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  qtyBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: '#EAF4FF', alignItems: 'center', justifyContent: 'center'
+  successCopy: {
+    flex: 1,
+    minWidth: 0
   },
-  qtyBtnText: { color: '#1A7FD4', fontSize: 22, fontWeight: '900', lineHeight: 26 },
-  qtyValue: { color: '#0A2540', fontSize: 22, fontWeight: '900', minWidth: 28, textAlign: 'center' },
-  orderSummaryRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#EAF4FF', marginBottom: 14
+  successTitle: {
+    color: '#1E7A45',
+    fontSize: 15,
+    fontWeight: '900'
   },
-  orderSummaryLabel: { color: '#6A90B0', fontSize: 14, fontWeight: '700' },
-  orderSummaryValue: { color: '#0A2540', fontSize: 18, fontWeight: '900' },
-  orderBtn: {
-    backgroundColor: '#1A7FD4', borderRadius: 18,
-    paddingVertical: 16, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: 8
+  successText: {
+    color: '#4E725C',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: 2
   },
-  orderBtnDisabled: { opacity: 0.6 },
-  orderBtnText: { color: '#fff', fontSize: 17, fontWeight: '900' },
-  recentBox: {
-    marginHorizontal: 18, marginTop: 14,
-    backgroundColor: '#fff', borderRadius: 24, padding: 18,
-    borderWidth: 1, borderColor: '#C8DFF5'
+  successClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#D6F0DE'
   },
-  recentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  recentTitle: { color: '#0A2540', fontSize: 17, fontWeight: '900' },
-  recentSeeAll: { color: '#1A7FD4', fontSize: 13, fontWeight: '800' },
-  recentItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#EAF4FF' },
-  recentDot: { width: 10, height: 10, borderRadius: 5 },
-  recentOrderNum: { color: '#0A2540', fontSize: 14, fontWeight: '800' },
-  recentOrderStatus: { color: '#6A90B0', fontSize: 12, marginTop: 2, textTransform: 'capitalize' },
-  recentOrderAmt: { color: '#1A7FD4', fontSize: 14, fontWeight: '900' },
-
+  successCloseText: {
+    color: '#1E7A45',
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 22
+  },
   card: {
-    marginHorizontal: 18, marginTop: 14,
-    backgroundColor: '#fff', borderRadius: 24, padding: 18,
-    borderWidth: 1, borderColor: '#C8DFF5'
+    marginTop: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#DBE8F4'
   },
-  cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { color: '#0A2540', fontSize: 17, fontWeight: '900' },
-  cardSub: { color: '#6A90B0', fontSize: 13, marginTop: 3 },
-  trackBtn: {
-    backgroundColor: '#D6EEFF', borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 8
+  productDetailsBox: {
+    marginBottom: 10,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DBE8F4',
+    padding: 14
   },
-  trackBtnText: { color: '#1A7FD4', fontSize: 13, fontWeight: '800' },
-  tileRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  tile: { flex: 1, backgroundColor: '#EAF4FF', borderRadius: 16, padding: 12 },
-  tileLabel: { color: '#6A90B0', fontSize: 11, fontWeight: '700' },
-  tileValue: { color: '#0A2540', fontSize: 14, fontWeight: '800', marginTop: 4 },
-
-  lastOrderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
-  lastOrderNum: { color: '#0A2540', fontSize: 15, fontWeight: '800' },
-  lastOrderStatus: { color: '#6A90B0', fontSize: 13 },
-
-  reorderBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    alignSelf: 'flex-start', marginTop: 14,
-    backgroundColor: '#D6EEFF', borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 9
+  productDetailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
   },
-  reorderBtnText: { color: '#1A7FD4', fontSize: 13, fontWeight: '800' },
-
-  commandBox: {
-    marginHorizontal: 18, marginTop: 14,
-    backgroundColor: '#fff', borderRadius: 24, padding: 18,
-    borderWidth: 1, borderColor: '#C8DFF5'
+  productDetailsTitle: {
+    color: '#12314D',
+    fontSize: 15,
+    fontWeight: '900'
   },
-  commandTitle: { color: '#0A2540', fontSize: 17, fontWeight: '900', marginBottom: 14 },
-  commandGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  commandItem: { width: '30%', alignItems: 'center', gap: 8, paddingVertical: 10 },
-  commandIcon: {
-    width: 52, height: 52, borderRadius: 18,
-    backgroundColor: '#D6EEFF', alignItems: 'center', justifyContent: 'center'
+  productPrice: {
+    color: '#0F6CBD',
+    fontSize: 18,
+    fontWeight: '900'
   },
-  commandLabel: { color: '#0A2540', fontSize: 12, fontWeight: '700', textAlign: 'center' },
-
-  reviewBox: {
-    marginHorizontal: 18, marginTop: 14, marginBottom: 4,
-    backgroundColor: '#fff', borderRadius: 24, padding: 18,
-    borderWidth: 1, borderColor: '#C8DFF5'
+  productStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12
   },
-  reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  reviewTitle: { color: '#0A2540', fontSize: 16, fontWeight: '800' },
-  reviewUser: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  reviewAvatar: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#1A7FD4', alignItems: 'center', justifyContent: 'center'
+  productStat: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 16,
+    backgroundColor: '#F5F9FD',
+    borderWidth: 1,
+    borderColor: '#E2EEF8',
+    paddingHorizontal: 10,
+    paddingVertical: 10
   },
-  reviewAvatarText: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  reviewName: { color: '#0A2540', fontSize: 15, fontWeight: '800' },
-  reviewSubtext: { color: '#6A90B0', fontSize: 12, marginTop: 2 },
-  starsRow: { flexDirection: 'row', gap: 8 },
-  starBtn: { padding: 2 },
-  reviewDone: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  reviewDoneText: { color: '#1A7FD4', fontSize: 13, fontWeight: '700' },
-  reviewHint: { color: '#6A90B0', fontSize: 12, marginTop: 10 },
-
-
+  productStatLabel: {
+    color: '#7B93AA',
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  productStatValue: {
+    color: '#12314D',
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 2
+  },
+  orderCard: {
+    marginTop: 0
+  },
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18
+  },
+  stepperButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EAF3FB',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  stepperText: {
+    color: '#0F6CBD',
+    fontSize: 24,
+    fontWeight: '900'
+  },
+  quantityValueWrap: {
+    alignItems: 'center'
+  },
+  quantityValue: {
+    color: '#12314D',
+    fontSize: 30,
+    fontWeight: '900'
+  },
+  quantityHint: {
+    color: '#7791A8',
+    fontSize: 12,
+    marginTop: 2
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 22,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E7F0F8'
+  },
+  totalLabel: {
+    color: '#6D869E',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  totalValue: {
+    color: '#12314D',
+    fontSize: 22,
+    fontWeight: '900'
+  },
+  orderButton: {
+    marginTop: 18,
+    backgroundColor: '#0F6CBD',
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16
+  },
+  successButton: {
+    backgroundColor: '#1E7A45'
+  },
+  orderButtonText: {
+    color: '#eeeeee',
+    fontSize: 16,
+    fontWeight: '900'
+  },
+  disabledButton: {
+    opacity: 0.6
+  },
+  trackBar: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginBottom: 14,
+    overflow: 'hidden'
+  },
+  trackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 2
+  },
+  trackLabelText: {
+    color: '#12314D',
+    fontSize: 14,
+    fontWeight: '900'
+  },
+  paymentStatusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  paymentStatusPaid: {
+    backgroundColor: '#E8F7EE'
+  },
+  paymentStatusPending: {
+    backgroundColor: '#FFF4D6'
+  },
+  paymentStatusText: {
+    fontSize: 11,
+    fontWeight: '900'
+  },
+  paymentStatusTextPaid: {
+    color: '#1E7A45'
+  },
+  paymentStatusTextPending: {
+    color: '#A15A00'
+  },
+  noOrderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#DBE8F4'
+  },
+  noOrderText: {
+    color: '#7B93AA',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  trackStep: {
+    alignItems: 'center',
+    gap: 5
+  },
+  trackDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#D6E8F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#C0D8EE'
+  },
+  trackDotDone: {
+    backgroundColor: '#0F6CBD',
+    borderColor: '#0F6CBD'
+  },
+  trackDotActive: {
+    backgroundColor: '#0F6CBD',
+    borderColor: '#0F6CBD',
+    boxShadow: '0px 0px 6px rgba(15,108,189,0.4)'
+  },
+  trackLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#D6E8F7',
+    marginBottom: 16
+  },
+  trackLineDone: {
+    backgroundColor: '#0F6CBD'
+  },
+  trackLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#A0B8CC',
+    textAlign: 'center'
+  },
+  trackLabelDone: {
+    color: '#0F6CBD'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(18, 49, 77, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#DBE8F4'
+  },
+  modalTitle: {
+    color: '#12314D',
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 26
+  },
+  modalSubtitle: {
+    color: '#6D869E',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 6
+  },
+  paymentList: {
+    gap: 10,
+    marginTop: 16
+  },
+  upiBox: {
+    marginTop: 14,
+    backgroundColor: '#F5F9FD',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DBE8F4',
+    padding: 14
+  },
+  upiLabel: {
+    color: '#12314D',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  upiInput: {
+    marginTop: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#C9DFF2',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    color: '#12314D',
+    fontSize: 14
+  },
+  upiHelp: {
+    color: '#56708A',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    marginTop: 8
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    backgroundColor: '#eaf3fb00',
+    borderRadius: 16,
+    alignItems: 'center',
+    paddingVertical: 13
+  },
+  modalSecondaryButtonText: {
+    color: '#0F6CBD',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    backgroundColor: '#0F6CBD',
+    borderRadius: 16,
+    alignItems: 'center',
+    paddingVertical: 13
+  },
+  modalPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800'
+  }
 });
 
 export default CustomerHomeScreen;
