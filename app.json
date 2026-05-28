@@ -5,14 +5,12 @@
     "version": "0.1.0",
     "sdkVersion": "49.0.0",
     "platforms": [
-      "ios",
-      "android",
-      "web"
+      "android"
     ],
     "owner": "thisaitechnologies7",
     "android": {
       "package": "com.thisaitechnologies.waterappnew",
-      "googleServicesFile": "./android/app/google-services.json"
+      "googleServicesFile": "./google-services.json"
     },
     "extra": {
       "eas": {
